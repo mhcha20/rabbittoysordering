@@ -78,10 +78,21 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
   }
   const HELP = '你可以問我：\n/next — 最近要預訂嘅商品同倒數\n/wish — 全部想預訂\n/pending — 未收貨訂單\n或者直接打字問，例如「GU 嗰三個幾時到？」';
 
-  async function sendLong(text, html = true) {
+  // Daily caps on Claude-answered questions from people other than the owner (they cost API credit).
+  const PER_USER = Number(process.env.TG_DAILY_PER_USER || 30), TOTAL = Number(process.env.TG_DAILY_TOTAL || 200);
+  let quota = { day: '', total: 0, by: {} };
+  function allowQuestion(chatId) {
+    const day = hkDate();
+    if (quota.day !== day) quota = { day, total: 0, by: {} };
+    if (quota.total >= TOTAL || (quota.by[chatId] || 0) >= PER_USER) return false;
+    quota.total++; quota.by[chatId] = (quota.by[chatId] || 0) + 1;
+    return true;
+  }
+
+  async function sendLong(text, html = true, chatId = state.chatId) {
     for (let i = 0; i < text.length; i += 3800) {
       const part = text.slice(i, i + 3800);
-      await call('sendMessage', { chat_id: state.chatId, text: part, disable_web_page_preview: true, ...(html ? { parse_mode: 'HTML' } : {}) });
+      await call('sendMessage', { chat_id: chatId, text: part, disable_web_page_preview: true, ...(html ? { parse_mode: 'HTML' } : {}) });
     }
   }
 
@@ -92,20 +103,23 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
       await send(`✅ 已連接「預訂商品記錄」。夠鐘預訂同截止前一日都會喺度通知你。\n\n${HELP}`);
       return;
     }
-    if (chatId !== state.chatId) { await send('呢個 bot 只供主人使用。', chatId); return; }
+    // Anyone may use the bot; reminders still go only to the linked owner chat.
+    const owner = chatId === state.chatId;
+    const reply = (t) => sendLong(t, true, chatId);
     const text = (msg.text || '').trim();
     if (!text) return;
     const cmd = text.split(/[\s@]/)[0].toLowerCase();
-    if (cmd === '/start' || cmd === '/help') return send(HELP);
-    if (cmd === '/next' || /^(下次|最近|幾時|下一次)|幾時(預訂|開賣|截止|落單)|要(預訂|買)咩/.test(text)) return sendLong(replyNext());
-    if (cmd === '/wish') return sendLong(replyWish());
-    if (cmd === '/pending') return sendLong(replyPending());
-    if (!ask) return send(HELP);
-    await call('sendChatAction', { chat_id: state.chatId, action: 'typing' }).catch(() => {});
+    if (cmd === '/start' || cmd === '/help') return reply(HELP);
+    if (cmd === '/next' || /^(下次|最近|幾時|下一次)|幾時(預訂|開賣|截止|落單)|要(預訂|買)咩/.test(text)) return reply(replyNext());
+    if (cmd === '/wish') return reply(replyWish());
+    if (cmd === '/pending') return reply(replyPending());
+    if (!ask) return reply(HELP);
+    if (!owner && !allowQuestion(chatId)) return reply('今日自由發問嘅次數用晒，聽日再問啦 🙏\n（/next、/wish、/pending 照用得）');
+    await call('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => {});
     try {
-      await sendLong(await ask(text, getItems()), false);
+      await sendLong(await ask(text, getItems()), false, chatId);
     } catch (e) {
-      await send(`答唔到：${esc(e.message)}\n\n${HELP}`);
+      await reply(`答唔到：${esc(e.message)}\n\n${HELP}`);
     }
   }
 
