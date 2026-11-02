@@ -12,8 +12,11 @@ window.SEED_ITEMS = [
   "shipDate": "2027-05-31",
   "delivery": "旺角交收中心自取 (EASY TRADE 萬事昌商業中心19樓)",
   "status": "已下單",
-  "notes": "",
-  "photos": []
+  "notes": "商品資料：https://pc.watch.impress.co.jp/docs/release/atpress/2144793.html",
+  "photos": [
+   "https://www.atpress.ne.jp/releases/636912/LL_img_636912_1.jpg",
+   "https://www.atpress.ne.jp/releases/636912/LL_img_636912_2.jpg"
+  ]
  },
  {
   "id": "seed-2",
@@ -44,8 +47,11 @@ window.SEED_ITEMS = [
   "shipDate": "2026-11-30",
   "delivery": "旺角交收中心自取 (EASY TRADE 萬事昌商業中心19樓)",
   "status": "已下單",
-  "notes": "",
-  "photos": []
+  "notes": "推測為 ハートキャッチプリキュア！ Pretty Memories ココロパフューム（未確認）。商品資料：https://premium.gamepedia.jp/hobby/archives/150255",
+  "photos": [
+   "https://media.gamepedia.jp/premium/wp-content/uploads/sites/5/2026/05/01161736/2-480x480.webp",
+   "https://media.gamepedia.jp/premium/wp-content/uploads/sites/5/2026/05/01161737/1-480x251.webp"
+  ]
  },
  {
   "id": "seed-4",
@@ -60,8 +66,11 @@ window.SEED_ITEMS = [
   "shipDate": "2026-11-30",
   "delivery": "旺角交收中心自取 (EASY TRADE 萬事昌商業中心19樓)",
   "status": "已下單",
-  "notes": "",
-  "photos": []
+  "notes": "推測為 ハートキャッチプリキュア！ Pretty Memories ココロパフューム（未確認）。商品資料：https://premium.gamepedia.jp/hobby/archives/150255",
+  "photos": [
+   "https://media.gamepedia.jp/premium/wp-content/uploads/sites/5/2026/05/01161736/2-480x480.webp",
+   "https://media.gamepedia.jp/premium/wp-content/uploads/sites/5/2026/05/01161737/1-480x251.webp"
+  ]
  },
  {
   "id": "seed-5",
@@ -124,8 +133,11 @@ window.SEED_ITEMS = [
   "shipDate": "2027年01月",
   "delivery": "日本國內配送 (Amazon Pay)",
   "status": "已確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品資料：https://pc.watch.impress.co.jp/docs/release/atpress/2139400.html",
+  "photos": [
+   "https://www.atpress.ne.jp/releases/628676/LL_img_628676_1.jpg",
+   "https://www.atpress.ne.jp/releases/628676/LL_img_628676_2.jpg"
+  ]
  },
  {
   "id": "seed-9",
@@ -140,8 +152,11 @@ window.SEED_ITEMS = [
   "shipDate": "2027年01月",
   "delivery": "日本國內配送 (Amazon Pay)",
   "status": "已確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品資料：https://pc.watch.impress.co.jp/docs/release/atpress/2139400.html",
+  "photos": [
+   "https://www.atpress.ne.jp/releases/628676/LL_img_628676_1.jpg",
+   "https://www.atpress.ne.jp/releases/628676/LL_img_628676_2.jpg"
+  ]
  },
  {
   "id": "seed-10",
