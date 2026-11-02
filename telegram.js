@@ -31,7 +31,7 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
   function itemLine(it) {
     const price = it.price ? ` — ${it.currency} ${Number(it.price).toLocaleString('en-US')}` : '';
     const links = [it.orderUrl && `<a href="${esc(it.orderUrl)}">🛒 預訂頁</a>`, it.link && `<a href="${esc(it.link)}">🔗 原帖</a>`].filter(Boolean).join('  ');
-    return `• <b>${esc(it.name)}</b>${esc(price)}\n  ${esc(it.platform || '')}${links ? '\n  ' + links : ''}`;
+    return `• <b>${esc(it.name)}</b>${esc(price)}${it.platform ? '\n  ' + esc(it.platform) : ''}${links ? '\n  ' + links : ''}`;
   }
 
   // ---------- answering messages ----------
@@ -39,7 +39,10 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
   // When does the user next need to act on a wishlist item? (remind time, else deadline at 23:59)
   function nextAction(it) {
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(it.remindAt || '')) return { at: hkTimeToMs(it.remindAt), label: `⏰ ${it.remindAt.slice(5, 10).replace('-', '/')} ${it.remindAt.slice(11)}` };
-    if (/^\d{4}-\d{2}-\d{2}/.test(it.deadline || '')) return { at: hkTimeToMs(`${it.deadline.slice(0, 10)}T23:59`), label: `📅 ${it.deadline.slice(5, 10).replace('-', '/')} 截止` };
+    if (/^\d{4}-\d{2}-\d{2}/.test(it.deadline || '')) {
+      const t = it.deadline.slice(11, 16);
+      return { at: hkTimeToMs(`${it.deadline.slice(0, 10)}T${t || '23:59'}`), label: `📅 ${it.deadline.slice(5, 10).replace('-', '/')}${t ? ' ' + t : ''} 截止` };
+    }
     return null;
   }
   function countdown(ms) {
@@ -126,13 +129,18 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
     if (!state.chatId) return;
     const now = Date.now();
     const items = getItems().filter((it) => it.status !== '已取消' && it.status !== '已放棄' && it.status !== '已收貨');
-    const due = { soon: [], now: [], tomorrow: [] };
+    const due = { soon: [], now: [], tomorrow: [], closing: [] };
     for (const it of items) {
       if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(it.remindAt || '')) {
         const at = hkTimeToMs(it.remindAt);
         const key = `${it.id}|${it.remindAt}`;
         if (now >= at - 15 * 60e3 && now < at && !state.sent[`soon|${key}`]) { due.soon.push(it); state.sent[`soon|${key}`] = now; }
         if (now >= at && now < at + 6 * 3600e3 && !state.sent[`now|${key}`]) { due.now.push(it); state.sent[`now|${key}`] = now; }
+      }
+      // 2 hours before a deadline that has a time (skip when it coincides with the remind time, which already alerts)
+      if (it.kind === 'wish' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(it.deadline || '') && it.deadline !== it.remindAt) {
+        const end = hkTimeToMs(it.deadline), key = `close|${it.id}|${it.deadline}`;
+        if (now >= end - 2 * 3600e3 && now < end && !state.sent[key]) { due.closing.push(it); state.sent[key] = now; }
       }
       // day-before heads-up for wishlist deadlines, sent from 09:00 Hong Kong time
       const tomorrow = hkDate(new Date(hkNow().getTime() + 86400e3));
@@ -143,8 +151,9 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
     const hhmm = (it) => it.remindAt.slice(11);
     if (due.soon.length) await send(`⏳ <b>快夠鐘預訂</b>（香港時間 ${hhmm(due.soon[0])}）\n\n${due.soon.map(itemLine).join('\n\n')}`);
     if (due.now.length) await send(`⏰ <b>夠鐘預訂喇！</b>\n\n${due.now.map(itemLine).join('\n\n')}`);
+    if (due.closing.length) await send(`⌛ <b>快截止！</b>\n\n${due.closing.map((it) => `${itemLine(it)}\n  截止：香港時間 ${esc(it.deadline.slice(5, 16).replace('-', '/').replace('T', ' '))}`).join('\n\n')}`);
     if (due.tomorrow.length) await send(`📅 <b>聽日截止／開賣</b>\n\n${due.tomorrow.map(itemLine).join('\n\n')}\n\n<a href="${esc(publicUrl)}">打開網站</a>`);
-    if (due.soon.length || due.now.length || due.tomorrow.length) {
+    if (due.soon.length || due.now.length || due.tomorrow.length || due.closing.length) {
       // forget old entries so the file stays small
       for (const [k, t] of Object.entries(state.sent)) if (now - t > 30 * 86400e3) delete state.sent[k];
       save();

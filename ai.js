@@ -46,7 +46,7 @@ const WISH_SCHEMA = {
     currency: { type: 'string', enum: CURRENCIES },
     price: { type: 'number', description: 'Official retail price incl. tax, 0 if unknown' },
     shipDate: { type: 'string', description: 'Release / shipping date as announced, e.g. 2027年3月, or empty' },
-    deadline: { type: 'string', description: 'Pre-order deadline as YYYY-MM-DD (add time in notes), or empty if none / unknown' },
+    deadline: { type: 'string', description: 'Pre-order / lottery deadline in Hong Kong time: YYYY-MM-DDTHH:MM when the time is known, else YYYY-MM-DD; empty if none / unknown' },
     notes: { type: 'string', description: 'Traditional Chinese: what it is, variants, pre-order period and how/where to order, official page URL, anything uncertain' },
     orderUrl: { type: 'string', description: 'URL of the page where this exact product is (or was) ordered / pre-ordered: the official shop or the shop in the screenshot, empty if not found' },
     remindAt: { type: 'string', description: 'Hong Kong local date-time YYYY-MM-DDTHH:MM when the user should act (pre-order / sale / lottery opens), only if that moment is still in the future; otherwise empty' },
@@ -65,7 +65,7 @@ How to work:
 4. For photoUrls, only use image URLs that appear on pages you actually fetched (official page images, og:image, press-release images). Never guess or construct an image URL.
 5. Write notes and summary in Traditional Chinese (Hong Kong). Mention anything you are unsure about so the user can check it.
 6. The user lives in Hong Kong (HKT, UTC+8). Convert every date-time you write (deadlines, sale start times, lottery periods) to Hong Kong time and show the original next to it, e.g. 「香港時間 10:00（日本 11:00）」. Japan (JST) is 1 hour ahead of Hong Kong; check the time zone of other sources. If a time converts across midnight, use the Hong Kong date (also for deadline).
-   A sale that starts at a fixed time (first come, first served) with no pre-order period: put the sale start date (Hong Kong date) in deadline so the user gets a countdown, and say so in notes.`;
+   A sale that starts at a fixed time (first come, first served) with no pre-order period: put the sale start (Hong Kong date and time) in deadline and in remindAt so the user gets a countdown and an alert, and say so in notes.`;
 
 const SYSTEM = `You help a collector in Hong Kong record pre-orders of toys and character goods (Precure, Chiikawa, Bandai, etc.).
 You receive screenshots of an order (order page, confirmation email, receipt) and must return one entry per distinct product line.

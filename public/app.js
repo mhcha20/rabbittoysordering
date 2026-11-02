@@ -62,16 +62,21 @@ const recvBtn = (it) => (it.status === '已取消' ? '' : it.status === '已收�
   ? `<button type="button" class="recv on" data-recv="${esc(it.id)}" title="撳一下改返未收貨">✓ 已收貨 ${shortDate(it.receivedAt)}</button>`
   : `<button type="button" class="recv" data-recv="${esc(it.id)}" title="撳一下標記已收貨">☐ 收貨</button>`);
 // Wishlist helpers
+// deadline is "YYYY-MM-DD" (ends 23:59) or "YYYY-MM-DDTHH:MM", both Hong Kong time
+const deadlineMs = (d) => (/^\d{4}-\d{2}-\d{2}/.test(d || '') ? Date.parse(`${d.slice(0, 10)}T${d.slice(11, 16) || '23:59'}:00+08:00`) : null);
 function daysLeft(deadline) {
   if (!/^\d{4}-\d{2}-\d{2}/.test(deadline || '')) return null;
   return Math.round((Date.parse(deadline.slice(0, 10)) - Date.parse(hkToday())) / 86400e3);
 }
 function deadlineText(it) {
   if (!it.deadline) return '預訂截止：—';
+  const left = deadlineMs(it.deadline) - Date.now();
   const d = daysLeft(it.deadline);
-  const when = d === null ? '' : d < 0 ? '（已截止）' : d === 0 ? '（今日截止！）' : `（剩 ${d} 日）`;
-  const cls = d === null ? '' : d < 0 ? 'over' : d <= 7 ? 'soon' : '';
-  return `<span class="deadline ${cls}">預訂截止：${esc(it.deadline)}${when}</span>`;
+  const h = Math.floor(left / 3600e3), m = Math.max(1, Math.round((left % 3600e3) / 60e3));
+  const when = left < 0 ? '（已截止）' : left < 3600e3 ? `（剩 ${m} 分鐘！）` : d === 0 || left < 24 * 3600e3 ? `（剩 ${h} 個鐘！）` : `（剩 ${d} 日）`;
+  const cls = left < 0 ? 'over' : d <= 7 ? 'soon' : '';
+  const label = it.deadline.slice(0, 10) + (it.deadline.length > 10 ? ' ' + it.deadline.slice(11, 16) : '');
+  return `<span class="deadline ${cls}">預訂截止：${esc(label)}${when}</span>`;
 }
 const remindText = (it) => (it.remindAt ? `<div class="meta remind">⏰ 提醒：${esc(it.remindAt.slice(5, 10).replace('-', '/'))} ${esc(it.remindAt.slice(11))}（香港時間）</div>` : '');
 const postLink = (it) => (it.link ? `<a class="postlink" href="${esc(it.link)}" target="_blank" rel="noopener">🔗 原帖</a>` : '');
@@ -109,7 +114,7 @@ function filtered() {
     (showC || (it.status !== '已取消' && it.status !== '已放棄')) &&
     (!p || it.platform === p) && (!pk || pickupKey(it.delivery) === pk) && (!s || (s === '__pending' ? pending(it) : it.status === s)) && (!c || it.currency === c) &&
     (!q || [it.name, it.orderNo, it.notes, it.platform, it.delivery, it.link, it.orderUrl].join(' ').toLowerCase().includes(q)));
-  const dl = (it) => (it.deadline ? it.deadline : '9999');
+  const dl = (it) => (it.deadline ? it.deadline.slice(0, 10) + 'T' + (it.deadline.slice(11, 16) || '23:59') : '9999');
   const sort = $('#sort').value;
   list.sort((a, b) =>
     sort === 'total' ? total(b) - total(a) :
@@ -125,7 +130,7 @@ function renderSummary() {
   if (tab === 'wish') {
     const sums = {};
     for (const i of wishes) sums[i.currency] = (sums[i.currency] || 0) + i.price * i.qty;
-    const soon = wishes.filter((i) => { const d = daysLeft(i.deadline); return d !== null && d >= 0 && d <= 7; }).length;
+    const soon = wishes.filter((i) => { const d = daysLeft(i.deadline); return d !== null && d <= 7 && deadlineMs(i.deadline) > Date.now(); }).length;
     $('#summary').innerHTML = `
       <div class="stat"><small>想預訂款數</small><b>${wishes.length}</b></div>
       <div class="stat"><small>7 日內截止</small><b>${soon}</b></div>
@@ -213,6 +218,8 @@ function openEditor(it, { isNew = !it, title } = {}) {
   f.dataset.kind = kindOf(editing);
   f.status.innerHTML = statusesFor(kindOf(editing)).map((s) => `<option>${s}</option>`).join('');
   for (const k of ['name', 'platform', 'orderNo', 'orderDate', 'shipDate', 'qty', 'currency', 'price', 'shipping', 'status', 'delivery', 'notes', 'link', 'orderUrl', 'deadline', 'remindAt']) f[k].value = editing[k] ?? '';
+  f.deadline.value = (editing.deadline || '').slice(0, 10);
+  f.deadlineTime.value = (editing.deadline || '').slice(11, 16);
   renderThumbs();
   $('#dlg').showModal();
 }
@@ -225,7 +232,7 @@ $('#form').addEventListener('submit', (e) => {
     name: f.name.value.trim(), platform: f.platform.value.trim(), orderNo: f.orderNo.value.trim(), orderDate: f.orderDate.value.trim(),
     shipDate: f.shipDate.value.trim(), qty: Math.max(1, +f.qty.value || 1), currency: f.currency.value, price: +f.price.value || 0,
     shipping: +f.shipping.value || 0, status: f.status.value, delivery: f.delivery.value.trim(), notes: f.notes.value,
-    link: f.link.value.trim(), orderUrl: f.orderUrl.value.trim(), deadline: f.deadline.value, remindAt: f.remindAt.value.slice(0, 16),
+    link: f.link.value.trim(), orderUrl: f.orderUrl.value.trim(), deadline: f.deadline.value ? f.deadline.value + (f.deadlineTime.value ? 'T' + f.deadlineTime.value.slice(0, 5) : '') : '', remindAt: f.remindAt.value.slice(0, 16),
   });
   const draft = editing;
   busy = true;

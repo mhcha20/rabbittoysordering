@@ -148,3 +148,4 @@ input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100
   .formBtns .grow{display:none}
 }
 .meta.remind{color:var(--pink-d);font-weight:600}
+.dt{display:grid;grid-template-columns:1fr 1fr;gap:8px}
