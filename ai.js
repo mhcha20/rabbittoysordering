@@ -2,7 +2,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
 const MODEL = 'claude-opus-5-5';
-const STATUSES = ['待確認', '已下單', '已確認', '已發貨', '已到貨', '已取消'];
+const STATUSES = ['待確認', '已下單', '已確認', '已發貨', '已收貨', '已取消'];
 
 const ITEM_SCHEMA = {
   type: 'object',
@@ -44,7 +44,7 @@ How to work:
    Budget your searches: once a search result points to the official product or collection page (or a news article with product photos), fetch that page straight away rather than searching more. If the official store page cannot be fetched, use a news / press article about the same products instead.
 3. For photoUrls, only use image URLs that appear on pages you actually fetched (product page images, og:image, press-release images). Prefer the official shop. Never guess or construct an image URL. If none is found, return an empty list.
 4. If per-item prices are not shown, use the official prices you found; if you still cannot tell, split the order total sensibly and say so in notes. Make sure qty x price (+ shipping) adds up to the order total shown, when a total is shown.
-5. Map the order state to one of: ${STATUSES.join('、')}. "已付款" / paid but not shipped means 已下單; shipped means 已發貨; picked up / received means 已到貨.
+5. Map the order state to one of: ${STATUSES.join('、')}. "已付款" / paid but not shipped means 已下單; shipped means 已發貨; picked up / received means 已收貨.
 6. Write notes and summary in Traditional Chinese (Hong Kong). Mention anything you are unsure about so the user can check it.`;
 
 let client;

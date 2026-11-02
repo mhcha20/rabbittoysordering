@@ -1,5 +1,5 @@
 (() => {
-const STATUSES = ['待確認', '已下單', '已確認', '已發貨', '已到貨', '已取消'];
+const STATUSES = ['待確認', '已下單', '已確認', '已發貨', '已收貨', '已取消'];
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (cur, n) => (cur === 'JPY' ? '¥' : 'HK$') + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -48,13 +48,34 @@ function resizeImage(file, max = 900) {
 const pickupKey = (d) => String(d || '').split(/\s*[（(]/)[0].trim() || '未填寫';
 
 // ---------- rendering ----------
+// the green "✓ 已收貨" button already says it, so skip the duplicate badge
+const badge = (it) => (it.status === '已收貨' ? '<span></span>' : `<span class="badge s-${esc(it.status)}">${esc(it.status)}</span>`);
+const shortDate = (d) => (d ? d.slice(5).replace('-', '/') : '');
+const recvBtn = (it) => (it.status === '已取消' ? '' : it.status === '已收貨'
+  ? `<button type="button" class="recv on" data-recv="${esc(it.id)}" title="撳一下改返未收貨">✓ 已收貨 ${shortDate(it.receivedAt)}</button>`
+  : `<button type="button" class="recv" data-recv="${esc(it.id)}" title="撳一下標記已收貨">☐ 收貨</button>`);
+async function toggleReceived(id) {
+  const it = items.find((x) => x.id === id);
+  if (!it) return;
+  const draft = it.status === '已收貨'
+    ? { ...it, status: it.prevStatus || '已下單', receivedAt: '', prevStatus: '' }
+    : { ...it, prevStatus: it.status, status: '已收貨', receivedAt: '' };
+  Object.assign(it, draft); render(); // instant feedback
+  busy = true;
+  try {
+    const { item } = await api('PUT', '/api/items/' + encodeURIComponent(id), draft);
+    Object.assign(it, item); render();
+  } catch (e) { busy = false; showError(e); refresh(); } finally { busy = false; }
+}
+
 function filtered() {
   const q = $('#q').value.trim().toLowerCase();
   const p = $('#fPlatform').value, s = $('#fStatus').value, c = $('#fCur').value, pk = $('#fPickup').value;
   const showC = $('#showCancelled').checked;
+  const pending = (it) => it.status !== '已收貨' && it.status !== '已取消';
   let list = items.filter((it) =>
     (showC || it.status !== '已取消') &&
-    (!p || it.platform === p) && (!pk || pickupKey(it.delivery) === pk) && (!s || it.status === s) && (!c || it.currency === c) &&
+    (!p || it.platform === p) && (!pk || pickupKey(it.delivery) === pk) && (!s || (s === '__pending' ? pending(it) : it.status === s)) && (!c || it.currency === c) &&
     (!q || [it.name, it.orderNo, it.notes, it.platform, it.delivery].join(' ').toLowerCase().includes(q)));
   const sort = $('#sort').value;
   list.sort((a, b) =>
@@ -72,10 +93,11 @@ function renderSummary() {
   };
   const h = by('HKD'), j = by('JPY');
   const cancelled = items.filter((i) => i.status === '已取消').length;
+  const got = live.filter((i) => i.status === '已收貨').length;
   $('#summary').innerHTML = `
     <div class="stat"><small>港幣訂單（${h.orders} 張・${h.n} 件）</small><b>${fmt('HKD', h.sum)}</b></div>
     <div class="stat"><small>日圓訂單（${j.orders} 張・${j.n} 件）</small><b>${fmt('JPY', j.sum)}</b></div>
-    <div class="stat"><small>有效商品款數</small><b>${live.length}</b></div>
+    <div class="stat"><small>已收貨 / 有效商品款數</small><b>${got} / ${live.length}</b></div>
     <div class="stat"><small>已取消款數</small><b>${cancelled}</b></div>`;
 }
 
@@ -87,11 +109,11 @@ function render() {
   el.className = view === 'grid' ? 'grid' : '';
   if (view === 'grid') {
     el.innerHTML = list.map((it) => `
-      <article class="card ${it.status === '已取消' ? 'cancelled' : ''}" data-id="${esc(it.id)}">
+      <article class="card ${it.status === '已取消' ? 'cancelled' : ''} ${it.status === '已收貨' ? 'received' : ''}" data-id="${esc(it.id)}">
         <div class="pic">${it.photos[0] ? `<img loading="lazy" src="${esc(it.photos[0])}" alt="">` : '尚無照片'}
           ${it.photos.length > 1 ? `<span class="cnt">${it.photos.length} 張</span>` : ''}</div>
         <div class="body">
-          <span class="badge s-${esc(it.status)}">${esc(it.status)}</span>
+          <div class="tags">${badge(it)}${recvBtn(it)}</div>
           <h3>${esc(it.name)}</h3>
           <div class="meta">${esc(it.platform)}${it.orderNo ? ' ・ ' + esc(it.orderNo) : ''}</div>
           <div class="meta">預計發貨：${esc(it.shipDate || '—')}</div>
@@ -105,7 +127,7 @@ function render() {
         <td>${it.photos[0] ? `<img loading="lazy" src="${esc(it.photos[0])}" alt="">` : ''}</td>
         <td>${esc(it.name)}</td><td>${esc(it.platform)}<br><span class="meta">${esc(it.orderNo)}</span></td>
         <td>${it.qty}</td><td>${fmt(it.currency, total(it))}</td><td>${esc(it.shipDate || '—')}</td>
-        <td><span class="badge s-${esc(it.status)}">${esc(it.status)}</span></td></tr>`).join('')}
+        <td>${badge(it)} ${recvBtn(it)}</td></tr>`).join('')}
       </tbody></table></div>`;
   }
   // filter option lists
@@ -138,6 +160,7 @@ function openEditor(it, { isNew = !it, title } = {}) {
 $('#form').addEventListener('submit', (e) => {
   if (e.submitter?.value !== 'ok') return;
   const f = $('#form');
+  if (f.status.value === '已收貨' && editing.status !== '已收貨') editing.prevStatus = editing.status;
   Object.assign(editing, {
     name: f.name.value.trim(), platform: f.platform.value.trim(), orderNo: f.orderNo.value.trim(), orderDate: f.orderDate.value.trim(),
     shipDate: f.shipDate.value.trim(), qty: Math.max(1, +f.qty.value || 1), currency: f.currency.value, price: +f.price.value || 0,
@@ -180,6 +203,8 @@ $('#lightbox').onclick = (e) => { if (e.target.id !== 'lbImg') $('#lightbox').cl
 
 // ---------- list interactions ----------
 $('#list').onclick = (e) => {
+  const rb = e.target.closest('[data-recv]');
+  if (rb) { e.stopPropagation(); toggleReceived(rb.dataset.recv); return; }
   const row = e.target.closest('[data-id]');
   if (row) openEditor(items.find((x) => x.id === row.dataset.id));
 };
@@ -252,7 +277,7 @@ $('#fileImport').onchange = async (e) => {
 
 // ---------- init ----------
 (async () => {
-  $('#fStatus').innerHTML += STATUSES.map((s) => `<option>${s}</option>`).join('');
+  $('#fStatus').innerHTML += '<option value="__pending">未收貨（全部）</option>' + STATUSES.map((s) => `<option>${s}</option>`).join('');
   await refresh();
   // keep every device in sync
   setInterval(refresh, 30000);

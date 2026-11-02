@@ -39,7 +39,7 @@ input,select,textarea{background:var(--card);border:1px solid var(--line);border
 .meta{color:var(--muted);font-size:12.5px}
 .price{margin-top:auto;font-weight:700;font-size:17px}
 .badge{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;color:#fff;background:var(--muted);width:fit-content}
-.s-已下單{background:#5b8def}.s-待確認{background:var(--warn)}.s-已確認{background:#8e6bd8}.s-已發貨{background:#17a2b8}.s-已到貨{background:var(--ok)}.s-已取消{background:var(--bad)}
+.s-已下單{background:#5b8def}.s-待確認{background:var(--warn)}.s-已確認{background:#8e6bd8}.s-已發貨{background:#17a2b8}.s-已收貨{background:var(--ok)}.s-已取消{background:var(--bad)}
 table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
 th{background:var(--bg);font-size:13px;color:var(--muted)}
@@ -91,3 +91,10 @@ label.btn.primary:hover{background:var(--pink-d)}
   .tableWrap td:nth-child(4){grid-column:3;grid-row:4;font-size:12px;color:var(--muted);text-align:right}
   .tableWrap td:nth-child(4)::before{content:"數量 "}
 }
+
+.recv{font-size:13px;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.recv.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.card .tags{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.card.received{opacity:.8}
+td .recv{margin-top:4px}
+@media(max-width:640px){.tableWrap td:nth-child(7){display:flex;gap:6px;align-items:center;justify-content:flex-end}.tableWrap td .recv{margin-top:0}}

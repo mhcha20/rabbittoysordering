@@ -22,6 +22,7 @@ function loadSeed() {
 }
 let items;
 try { items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8')); } catch { items = loadSeed(); }
+items = items.map((it) => ({ ...it, ...receivedFields(it) }));
 let version = Date.now();
 
 function persist() {
@@ -45,6 +46,17 @@ function storePhotos(item) {
   return item;
 }
 
+// Status "已收貨" carries the date it was received and the status to go back to if it is un-ticked.
+const hkToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+function receivedFields(raw) {
+  if (raw.status === '已到貨') raw.status = '已收貨'; // old name
+  const received = raw.status === '已收貨';
+  return {
+    receivedAt: received ? String(raw.receivedAt || hkToday()) : '',
+    prevStatus: raw.prevStatus && raw.prevStatus !== '已收貨' ? String(raw.prevStatus) : '',
+  };
+}
+
 function cleanItem(raw) {
   const s = (v) => (v == null ? '' : String(v));
   return storePhotos({
@@ -52,6 +64,7 @@ function cleanItem(raw) {
     name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: raw.currency === 'HKD' ? 'HKD' : 'JPY',
     price: Number(raw.price) || 0, shipping: Number(raw.shipping) || 0, shipDate: s(raw.shipDate), delivery: s(raw.delivery),
     status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos,
+    ...receivedFields(raw),
   });
 }
 
