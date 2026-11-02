@@ -39,7 +39,9 @@ You receive screenshots of an order (order page, confirmation email, receipt) an
 
 How to work:
 1. Read everything visible in the screenshots: shop, order number, dates, item names, quantities, prices, currency, shipping, totals, expected ship/arrival dates, pickup method, payment status.
+   Copy order numbers and other long numbers exactly, digit by digit; count the digits and re-read them against the image before answering.
 2. Product names in screenshots are often cut off, and some screenshots only show product thumbnails. Use web search and web fetch to identify each product exactly (match by shop, collaboration, thumbnail look, price and date), and find its official name, official price and an official product photo.
+   Budget your searches: once a search result points to the official product or collection page (or a news article with product photos), fetch that page straight away rather than searching more. If the official store page cannot be fetched, use a news / press article about the same products instead.
 3. For photoUrls, only use image URLs that appear on pages you actually fetched (product page images, og:image, press-release images). Prefer the official shop. Never guess or construct an image URL. If none is found, return an empty list.
 4. If per-item prices are not shown, use the official prices you found; if you still cannot tell, split the order total sensibly and say so in notes. Make sure qty x price (+ shipping) adds up to the order total shown, when a total is shown.
 5. Map the order state to one of: ${STATUSES.join('、')}. "已付款" / paid but not shipped means 已下單; shipped means 已發貨; picked up / received means 已到貨.
@@ -86,8 +88,8 @@ async function parseOrder({ images, hint }) {
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: RESULT_SCHEMA } },
       system: SYSTEM,
       tools: [
-        { type: 'web_search_20260209', name: 'web_search', max_uses: 10 },
-        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 15 },
+        { type: 'web_search_20260209', name: 'web_search', max_uses: 12 },
+        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 20 },
       ],
       messages,
     }).finalMessage();
