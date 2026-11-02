@@ -10,7 +10,8 @@
 <header class="top">
   <h1>🐰 預訂商品記錄</h1>
   <div class="actions">
-    <button id="btnAdd" class="primary">＋ 新增商品</button>
+    <label class="btn primary">📷 截圖自動新增<input type="file" id="aiFile" accept="image/*" multiple hidden></label>
+    <button id="btnAdd">＋ 手動新增</button>
     <button id="btnExport">匯出備份</button>
     <label class="btn">匯入備份<input type="file" id="fileImport" accept="application/json" hidden></label>
   </div>
@@ -69,6 +70,12 @@
       <button type="submit" class="primary" value="ok">儲存</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="aiBusy" class="busy">
+  <div class="spinner"></div>
+  <p><b>AI 分析緊截圖，同時上網搵商品資料同相…</b></p>
+  <p class="meta">大約需要 1–3 分鐘，請唔好關閉呢個頁面。</p>
 </dialog>
 
 <dialog id="lightbox"><img id="lbImg" alt=""><button id="lbClose">✕</button></dialog>

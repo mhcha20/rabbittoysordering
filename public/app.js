@@ -117,10 +117,10 @@ function renderThumbs() {
   $('#photoPreview').innerHTML = editing.photos.map((src, i) =>
     `<div class="thumb"><img src="${esc(src)}" alt=""><button type="button" data-rm="${i}" title="移除">×</button></div>`).join('');
 }
-function openEditor(it) {
-  const isNew = !it;
-  editing = it ? JSON.parse(JSON.stringify(it)) : { id: 'i' + Date.now(), platform: '', orderNo: '', orderDate: '', name: '', qty: 1, currency: 'JPY', price: 0, shipping: 0, shipDate: '', delivery: '', status: '已下單', notes: '', photos: [] };
-  $('#dlgTitle').textContent = isNew ? '新增商品' : '商品詳情 / 編輯';
+const blankItem = () => ({ id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6), platform: '', orderNo: '', orderDate: '', name: '', qty: 1, currency: 'JPY', price: 0, shipping: 0, shipDate: '', delivery: '', status: '已下單', notes: '', photos: [] });
+function openEditor(it, { isNew = !it, title } = {}) {
+  editing = it ? JSON.parse(JSON.stringify(it)) : blankItem();
+  $('#dlgTitle').textContent = title || (isNew ? '新增商品' : '商品詳情 / 編輯');
   $('#btnDelete').hidden = isNew;
   const f = $('#form');
   f.status.innerHTML = STATUSES.map((s) => `<option>${s}</option>`).join('');
@@ -178,6 +178,38 @@ $('#list').onclick = (e) => {
   if (row) openEditor(items.find((x) => x.id === row.dataset.id));
 };
 $('#btnAdd').onclick = () => openEditor();
+
+// ---------- AI: screenshot -> draft items ----------
+let aiQueue = [];
+function openNextDraft() {
+  const next = aiQueue.shift();
+  if (!next) return;
+  openEditor(next.item, { isNew: true, title: `AI 草稿 ${next.n}/${next.total}：檢查後按儲存` });
+}
+$('#dlg').addEventListener('close', () => { if (aiQueue.length) setTimeout(openNextDraft, 200); });
+$('#aiFile').onchange = async (e) => {
+  const files = [...e.target.files].slice(0, 6); e.target.value = '';
+  if (!files.length) return;
+  $('#aiBusy').showModal();
+  try {
+    const images = await Promise.all(files.map((f) => resizeImage(f, 1800)));
+    const result = await api('POST', '/api/ai/parse', { images });
+    $('#aiBusy').close();
+    if (!result.items?.length) { alert('AI 搵唔到商品資料。' + (result.summary || '')); return; }
+    const total = result.items.length;
+    aiQueue = result.items.map((d, i) => ({
+      n: i + 1, total,
+      item: { ...blankItem(), ...d, notes: d.notes || '', photos: [...(d.photos || []), ...images] }, // keep the screenshot too
+    }));
+    alert(`AI 搵到 ${total} 件商品。\n${result.summary || ''}\n\n會逐件打開，請檢查資料，啱就按「儲存」，唔要就按「取消」。`);
+    openNextDraft();
+  } catch (err) {
+    $('#aiBusy').close();
+    let msg = err.message || String(err);
+    try { msg = JSON.parse(msg.replace(/^\d+ /, '')).error || msg; } catch { /* plain text */ }
+    alert('AI 分析失敗：' + msg);
+  }
+};
 for (const id of ['#q', '#fPlatform', '#fStatus', '#fCur', '#sort', '#showCancelled']) $(id).addEventListener('input', render);
 document.querySelectorAll('.view button').forEach((b) => b.onclick = () => {
   view = b.dataset.view;

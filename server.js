@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { parseOrder } = require('./ai');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -111,6 +112,11 @@ http.createServer(async (req, res) => {
       items = items.filter((x) => x.id !== m[1]); persist();
       return send(res, 200, { version });
     }
+    if (p === '/api/ai/parse' && req.method === 'POST') {
+      const body = await readBody(req);
+      const images = Array.isArray(body?.images) ? body.images.slice(0, 6) : [];
+      return send(res, 200, await parseOrder({ images, hint: String(body?.hint || '').slice(0, 500) }));
+    }
     if (p.startsWith('/photos/') && req.method === 'GET') {
       const name = path.basename(p);
       return serveFile(res, path.join(PHOTO_DIR, name), 'private, max-age=31536000, immutable');
@@ -122,6 +128,8 @@ http.createServer(async (req, res) => {
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {
-    send(res, e.message === 'too large' ? 413 : 400, { error: String(e.message || e) });
+    if (e.status && e.status >= 500) console.error(e);
+    const code = e.message === 'too large' ? 413 : (Number.isInteger(e.status) && e.status >= 400 && e.status < 600 ? e.status : 400);
+    send(res, code, { error: String(e.message || e) });
   }
 }).listen(PORT, () => console.log(`listening on ${PORT}, data in ${DATA_DIR}, password ${PASSWORD ? 'on' : 'OFF'}`));
