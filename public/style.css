@@ -130,3 +130,5 @@ form[data-kind=order] .wishOnly{display:none}
 
 [hidden]{display:none!important}
 .filters select{max-width:100%;min-width:0;text-overflow:ellipsis}
+.links{display:flex;gap:14px;flex-wrap:wrap}
+.postlink.shop{font-weight:700}

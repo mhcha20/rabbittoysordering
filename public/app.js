@@ -73,7 +73,8 @@ function deadlineText(it) {
   const cls = d === null ? '' : d < 0 ? 'over' : d <= 7 ? 'soon' : '';
   return `<span class="deadline ${cls}">預訂截止：${esc(it.deadline)}${when}</span>`;
 }
-const postLink = (it) => (it.link ? `<a class="postlink" href="${esc(it.link)}" target="_blank" rel="noopener">🔗 原帖 / 連結</a>` : '');
+const postLink = (it) => (it.link ? `<a class="postlink" href="${esc(it.link)}" target="_blank" rel="noopener">🔗 原帖</a>` : '');
+const shopLink = (it) => (it.orderUrl ? `<a class="postlink shop" href="${esc(it.orderUrl)}" target="_blank" rel="noopener">🛒 預訂頁</a>` : '');
 const orderedBtn = (it) => (it.status === '已放棄' ? '' : `<button type="button" class="ordered" data-ordered="${esc(it.id)}" title="已經落咗單，轉去我的訂單">✓ 已落單</button>`);
 function convertToOrder(id) {
   const it = items.find((x) => x.id === id);
@@ -106,7 +107,7 @@ function filtered() {
   let list = items.filter((it) => kindOf(it) === tab &&
     (showC || (it.status !== '已取消' && it.status !== '已放棄')) &&
     (!p || it.platform === p) && (!pk || pickupKey(it.delivery) === pk) && (!s || (s === '__pending' ? pending(it) : it.status === s)) && (!c || it.currency === c) &&
-    (!q || [it.name, it.orderNo, it.notes, it.platform, it.delivery, it.link].join(' ').toLowerCase().includes(q)));
+    (!q || [it.name, it.orderNo, it.notes, it.platform, it.delivery, it.link, it.orderUrl].join(' ').toLowerCase().includes(q)));
   const dl = (it) => (it.deadline ? it.deadline : '9999');
   const sort = $('#sort').value;
   list.sort((a, b) =>
@@ -165,13 +166,15 @@ function render() {
           <div class="meta">${esc(it.platform)}</div>
           <div class="meta">${deadlineText(it)}</div>
           <div class="meta">預計發售：${esc(it.shipDate || '—')}</div>
-          <div class="price">${it.price ? fmt(it.currency, it.price) : '價錢未知'} ${postLink(it)}</div>` : `
+          <div class="price">${it.price ? fmt(it.currency, it.price) : '價錢未知'}</div>
+          <div class="links">${shopLink(it)}${postLink(it)}</div>` : `
           <div class="tags">${badge(it)}${recvBtn(it)}</div>
           <h3>${esc(it.name)}</h3>
           <div class="meta">${esc(it.platform)}${it.orderNo ? ' ・ ' + esc(it.orderNo) : ''}</div>
           <div class="meta">預計發貨：${esc(it.shipDate || '—')}</div>
           <div class="price">${fmt(it.currency, total(it))}
-            <span class="meta">（${fmt(it.currency, it.price)} × ${it.qty}${it.shipping ? ' + 運費 ' + fmt(it.currency, it.shipping) : ''}）</span></div>`}
+            <span class="meta">（${fmt(it.currency, it.price)} × ${it.qty}${it.shipping ? ' + 運費 ' + fmt(it.currency, it.shipping) : ''}）</span></div>
+          ${it.orderUrl || it.link ? `<div class="links">${shopLink(it)}${postLink(it)}</div>` : ''}`}
         </div>
       </article>`).join('');
   } else {
@@ -199,7 +202,7 @@ function renderThumbs() {
   $('#photoPreview').innerHTML = editing.photos.map((src, i) =>
     `<div class="thumb"><img src="${esc(src)}" alt=""><button type="button" data-rm="${i}" title="移除">×</button></div>`).join('');
 }
-const blankItem = (kind = tab) => ({ id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6), kind, link: '', deadline: '', platform: '', orderNo: '', orderDate: '', name: '', qty: 1, currency: 'JPY', price: 0, shipping: 0, shipDate: '', delivery: '', status: kind === 'wish' ? '想買' : '已下單', notes: '', photos: [] });
+const blankItem = (kind = tab) => ({ id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6), kind, link: '', orderUrl: '', deadline: '', platform: '', orderNo: '', orderDate: '', name: '', qty: 1, currency: 'JPY', price: 0, shipping: 0, shipDate: '', delivery: '', status: kind === 'wish' ? '想買' : '已下單', notes: '', photos: [] });
 function openEditor(it, { isNew = !it, title } = {}) {
   editing = it ? JSON.parse(JSON.stringify(it)) : blankItem();
   $('#dlgTitle').textContent = title || (isNew ? '新增商品' : '商品詳情 / 編輯');
@@ -207,7 +210,7 @@ function openEditor(it, { isNew = !it, title } = {}) {
   const f = $('#form');
   f.dataset.kind = kindOf(editing);
   f.status.innerHTML = statusesFor(kindOf(editing)).map((s) => `<option>${s}</option>`).join('');
-  for (const k of ['name', 'platform', 'orderNo', 'orderDate', 'shipDate', 'qty', 'currency', 'price', 'shipping', 'status', 'delivery', 'notes', 'link', 'deadline']) f[k].value = editing[k] ?? '';
+  for (const k of ['name', 'platform', 'orderNo', 'orderDate', 'shipDate', 'qty', 'currency', 'price', 'shipping', 'status', 'delivery', 'notes', 'link', 'orderUrl', 'deadline']) f[k].value = editing[k] ?? '';
   renderThumbs();
   $('#dlg').showModal();
 }
@@ -220,7 +223,7 @@ $('#form').addEventListener('submit', (e) => {
     name: f.name.value.trim(), platform: f.platform.value.trim(), orderNo: f.orderNo.value.trim(), orderDate: f.orderDate.value.trim(),
     shipDate: f.shipDate.value.trim(), qty: Math.max(1, +f.qty.value || 1), currency: f.currency.value, price: +f.price.value || 0,
     shipping: +f.shipping.value || 0, status: f.status.value, delivery: f.delivery.value.trim(), notes: f.notes.value,
-    link: f.link.value.trim(), deadline: f.deadline.value,
+    link: f.link.value.trim(), orderUrl: f.orderUrl.value.trim(), deadline: f.deadline.value,
   });
   const draft = editing;
   busy = true;

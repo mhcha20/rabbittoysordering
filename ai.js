@@ -8,7 +8,7 @@ const CURRENCIES = ['HKD', 'JPY', 'CNY', 'TWD', 'USD'];
 const ITEM_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['name', 'platform', 'orderNo', 'orderDate', 'qty', 'currency', 'price', 'shipping', 'shipDate', 'delivery', 'status', 'notes', 'photoUrls'],
+  required: ['name', 'platform', 'orderNo', 'orderDate', 'qty', 'currency', 'price', 'shipping', 'shipDate', 'delivery', 'status', 'notes', 'photoUrls', 'orderUrl'],
   properties: {
     name: { type: 'string', description: 'Full product name, official name if found (keep original Japanese, add Chinese in brackets if helpful)' },
     platform: { type: 'string', description: 'Shop / platform name, e.g. GU, Premium Bandai, ちいかわマーケット' },
@@ -22,6 +22,7 @@ const ITEM_SCHEMA = {
     delivery: { type: 'string', description: 'Pickup / delivery method' },
     status: { type: 'string', enum: STATUSES },
     notes: { type: 'string', description: 'Useful details in Traditional Chinese: variant, size, product page URL, anything uncertain' },
+    orderUrl: { type: 'string', description: 'URL of the page where this exact product is (or was) ordered / pre-ordered: the official shop or the shop in the screenshot, empty if not found' },
     photoUrls: { type: 'array', items: { type: 'string' }, description: 'Direct image URLs (jpg/png/webp) of this exact product, taken from pages you fetched' },
   },
 };
@@ -38,7 +39,7 @@ const resultSchema = (itemSchema) => ({
 const WISH_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['name', 'platform', 'currency', 'price', 'shipDate', 'deadline', 'notes', 'photoUrls'],
+  required: ['name', 'platform', 'currency', 'price', 'shipDate', 'deadline', 'notes', 'photoUrls', 'orderUrl'],
   properties: {
     name: { type: 'string', description: 'Official product name (keep original Japanese, add Chinese in brackets if helpful)' },
     platform: { type: 'string', description: 'Where it can be pre-ordered (official shop / store), or the maker if unknown' },
@@ -47,6 +48,7 @@ const WISH_SCHEMA = {
     shipDate: { type: 'string', description: 'Release / shipping date as announced, e.g. 2027年3月, or empty' },
     deadline: { type: 'string', description: 'Pre-order deadline as YYYY-MM-DD (add time in notes), or empty if none / unknown' },
     notes: { type: 'string', description: 'Traditional Chinese: what it is, variants, pre-order period and how/where to order, official page URL, anything uncertain' },
+    orderUrl: { type: 'string', description: 'URL of the page where this exact product is (or was) ordered / pre-ordered: the official shop or the shop in the screenshot, empty if not found' },
     photoUrls: { type: 'array', items: { type: 'string' }, description: 'Direct image URLs (jpg/png/webp) of this exact product, taken from pages you fetched' },
   },
 };

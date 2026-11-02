@@ -22,7 +22,7 @@ function loadSeed() {
 }
 let items;
 try { items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8')); } catch { items = loadSeed(); }
-items = items.map((it) => ({ kind: 'order', link: '', deadline: '', ...it, ...receivedFields(it) }));
+items = items.map((it) => ({ kind: 'order', link: '', orderUrl: '', deadline: '', ...it, ...receivedFields(it) }));
 let version = Date.now();
 
 function persist() {
@@ -63,7 +63,7 @@ function cleanItem(raw) {
   const s = (v) => (v == null ? '' : String(v));
   return storePhotos({
     id: s(raw.id) || 'i' + Date.now(), platform: s(raw.platform), orderNo: s(raw.orderNo), orderDate: s(raw.orderDate),
-    kind: raw.kind === 'wish' ? 'wish' : 'order', link: /^https?:\/\//.test(s(raw.link)) ? s(raw.link) : '', deadline: s(raw.deadline),
+    kind: raw.kind === 'wish' ? 'wish' : 'order', link: /^https?:\/\//.test(s(raw.link)) ? s(raw.link) : '', orderUrl: /^https?:\/\//.test(s(raw.orderUrl)) ? s(raw.orderUrl) : '', deadline: s(raw.deadline),
     name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: CURRENCIES.includes(raw.currency) ? raw.currency : 'JPY',
     price: Number(raw.price) || 0, shipping: Number(raw.shipping) || 0, shipDate: s(raw.shipDate), delivery: s(raw.delivery),
     status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos,
