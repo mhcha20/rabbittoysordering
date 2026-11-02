@@ -99,7 +99,7 @@ function authorized(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = decodeURIComponent(url.pathname);
   if (p === '/healthz') return send(res, 200, { ok: true });
@@ -146,3 +146,13 @@ http.createServer(async (req, res) => {
     send(res, code, { error: String(e.message || e) });
   }
 }).listen(PORT, () => console.log(`listening on ${PORT}, data in ${DATA_DIR}, password ${PASSWORD ? 'on' : 'OFF'}`));
+
+// Railway stops the old container with SIGTERM on every redeploy: finish in-flight requests and exit cleanly
+// (exiting with an error code makes Railway report the deploy as crashed).
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    console.log(`${sig} received, shutting down`);
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 8000).unref();
+  });
+}
