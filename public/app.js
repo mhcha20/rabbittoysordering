@@ -57,6 +57,9 @@ const recvBtn = (it) => (it.status === '已取消' ? '' : it.status === '已收�
 async function toggleReceived(id) {
   const it = items.find((x) => x.id === id);
   if (!it) return;
+  const name = it.name.length > 40 ? it.name.slice(0, 40) + '…' : it.name;
+  const ask = it.status === '已收貨' ? `將「${name}」改返做未收貨？` : `確認已經收到「${name}」？`;
+  if (!confirm(ask)) return;
   const draft = it.status === '已收貨'
     ? { ...it, status: it.prevStatus || '已下單', receivedAt: '', prevStatus: '' }
     : { ...it, prevStatus: it.status, status: '已收貨', receivedAt: '' };
@@ -110,8 +113,8 @@ function render() {
   if (view === 'grid') {
     el.innerHTML = list.map((it) => `
       <article class="card ${it.status === '已取消' ? 'cancelled' : ''} ${it.status === '已收貨' ? 'received' : ''}" data-id="${esc(it.id)}">
-        <div class="pic">${it.photos[0] ? `<img loading="lazy" src="${esc(it.photos[0])}" alt="">` : '尚無照片'}
-          ${it.photos.length > 1 ? `<span class="cnt">${it.photos.length} 張</span>` : ''}</div>
+        <div class="pic">${it.photos.length ? `<div class="slides">${it.photos.map((src) => `<img loading="lazy" src="${esc(src)}" alt="">`).join('')}</div>` : '尚無照片'}
+          ${it.photos.length > 1 ? `<button type="button" class="nav prev" data-slide="-1" aria-label="上一張">‹</button><button type="button" class="nav next" data-slide="1" aria-label="下一張">›</button><span class="cnt">1 / ${it.photos.length}</span>` : ''}</div>
         <div class="body">
           <div class="tags">${badge(it)}${recvBtn(it)}</div>
           <h3>${esc(it.name)}</h3>
@@ -203,12 +206,26 @@ $('#lightbox').onclick = (e) => { if (e.target.id !== 'lbImg') $('#lightbox').cl
 
 // ---------- list interactions ----------
 $('#list').onclick = (e) => {
+  const nav = e.target.closest('[data-slide]');
+  if (nav) {
+    e.stopPropagation();
+    const box = nav.parentElement.querySelector('.slides');
+    box.scrollBy({ left: Number(nav.dataset.slide) * box.clientWidth, behavior: 'smooth' });
+    return;
+  }
   const rb = e.target.closest('[data-recv]');
   if (rb) { e.stopPropagation(); toggleReceived(rb.dataset.recv); return; }
   const row = e.target.closest('[data-id]');
   if (row) openEditor(items.find((x) => x.id === row.dataset.id));
 };
 $('#btnAdd').onclick = () => openEditor();
+// photo carousel: keep the "n / total" counter in step with swiping (scroll events don't bubble, so capture)
+$('#list').addEventListener('scroll', (e) => {
+  const box = e.target;
+  if (!box.classList?.contains('slides')) return;
+  const cnt = box.parentElement.querySelector('.cnt');
+  if (cnt) cnt.textContent = `${Math.round(box.scrollLeft / box.clientWidth) + 1} / ${box.children.length}`;
+}, true);
 
 // ---------- AI: screenshot -> draft items ----------
 let aiQueue = [];

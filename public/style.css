@@ -98,3 +98,11 @@ label.btn.primary:hover{background:var(--pink-d)}
 .card.received{opacity:.8}
 td .recv{margin-top:4px}
 @media(max-width:640px){.tableWrap td:nth-child(7){display:flex;gap:6px;align-items:center;justify-content:flex-end}.tableWrap td .recv{margin-top:0}}
+
+/* swipeable photos on cards */
+.pic .slides{display:flex;width:100%;height:100%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain}
+.pic .slides::-webkit-scrollbar{display:none}
+.pic .slides img{flex:0 0 100%;scroll-snap-align:center;scroll-snap-stop:always}
+.pic .nav{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;padding:0;border-radius:50%;border:0;background:rgba(0,0,0,.4);color:#fff;font-size:22px;line-height:1;display:none}
+.pic .prev{left:8px}.pic .next{right:8px}
+@media (hover:hover){.card:hover .pic .nav{display:block}}
