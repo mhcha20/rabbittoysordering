@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>預訂商品記錄</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>🐰 預訂商品記錄</h1>
+  <div class="actions">
+    <button id="btnAdd" class="primary">＋ 新增商品</button>
+    <button id="btnExport">匯出備份</button>
+    <label class="btn">匯入備份<input type="file" id="fileImport" accept="application/json" hidden></label>
+  </div>
+</header>
+
+<main>
+  <section id="summary" class="summary"></section>
+
+  <section class="filters">
+    <input id="q" type="search" placeholder="搜尋商品、訂單編號、備註…">
+    <select id="fPlatform"><option value="">全部店舖</option></select>
+    <select id="fStatus"><option value="">全部狀態</option></select>
+    <select id="fCur"><option value="">全部幣別</option><option>HKD</option><option>JPY</option></select>
+    <select id="sort">
+      <option value="ship">按預計發貨排序</option>
+      <option value="order">按下單日期（新→舊）</option>
+      <option value="total">按金額（高→低）</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="showCancelled"> 顯示已取消</label>
+    <div class="view">
+      <button data-view="grid" class="on">卡片</button><button data-view="table">表格</button>
+    </div>
+  </section>
+
+  <section id="list" class="grid"></section>
+  <p id="empty" class="empty" hidden>沒有符合條件的商品</p>
+</main>
+
+<dialog id="dlg">
+  <form id="form" method="dialog">
+    <h2 id="dlgTitle">新增商品</h2>
+    <div class="photos">
+      <div id="photoPreview" class="thumbs"></div>
+      <div class="photoBtns">
+        <label class="btn">📷 上傳照片（可多張）<input type="file" id="photoFile" accept="image/*" multiple hidden></label>
+        <button type="button" id="photoUrl">貼上圖片網址</button>
+      </div>
+    </div>
+    <label class="wide">商品名稱<input name="name" required></label>
+    <label>購買平台 / 店舖<input name="platform" list="platforms"></label>
+    <datalist id="platforms"></datalist>
+    <label>訂單編號<input name="orderNo"></label>
+    <label>下單日期<input name="orderDate" type="text" placeholder="2026-10-23"></label>
+    <label>預計發貨 / 交收<input name="shipDate" placeholder="2027-01 或 2027年01月"></label>
+    <label>數量<input name="qty" type="number" min="1" value="1" required></label>
+    <label>幣別<select name="currency"><option>JPY</option><option>HKD</option></select></label>
+    <label>單價<input name="price" type="number" min="0" step="any" required></label>
+    <label>運費<input name="shipping" type="number" min="0" step="any" value="0"></label>
+    <label>狀態<select name="status"></select></label>
+    <label class="wide">取貨 / 配送方式<input name="delivery"></label>
+    <label class="wide">備註 / 詳細資訊<textarea name="notes" rows="3" placeholder="款式、尺寸、商品連結、收件資料…"></textarea></label>
+    <div class="formBtns">
+      <button type="button" id="btnDelete" class="danger">刪除</button>
+      <span class="grow"></span>
+      <button type="button" id="btnCancel">取消</button>
+      <button type="submit" class="primary" value="ok">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="lightbox"><img id="lbImg" alt=""><button id="lbClose">✕</button></dialog>
+
+<script src="seed.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
