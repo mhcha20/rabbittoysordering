@@ -129,3 +129,4 @@ form[data-kind=order] .wishOnly{display:none}
 @media(max-width:640px){.tableWrap td:nth-child(7) .ordered{margin-top:0}}
 
 [hidden]{display:none!important}
+.filters select{max-width:100%;min-width:0;text-overflow:ellipsis}
