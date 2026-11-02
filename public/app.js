@@ -44,14 +44,17 @@ function resizeImage(file, max = 900) {
   });
 }
 
+// Group pickup / delivery text by its main part, e.g. "日本國內配送 (Amazon Pay)" -> "日本國內配送".
+const pickupKey = (d) => String(d || '').split(/\s*[（(]/)[0].trim() || '未填寫';
+
 // ---------- rendering ----------
 function filtered() {
   const q = $('#q').value.trim().toLowerCase();
-  const p = $('#fPlatform').value, s = $('#fStatus').value, c = $('#fCur').value;
+  const p = $('#fPlatform').value, s = $('#fStatus').value, c = $('#fCur').value, pk = $('#fPickup').value;
   const showC = $('#showCancelled').checked;
   let list = items.filter((it) =>
     (showC || it.status !== '已取消') &&
-    (!p || it.platform === p) && (!s || it.status === s) && (!c || it.currency === c) &&
+    (!p || it.platform === p) && (!pk || pickupKey(it.delivery) === pk) && (!s || it.status === s) && (!c || it.currency === c) &&
     (!q || [it.name, it.orderNo, it.notes, it.platform, it.delivery].join(' ').toLowerCase().includes(q)));
   const sort = $('#sort').value;
   list.sort((a, b) =>
@@ -109,6 +112,9 @@ function render() {
   const plats = [...new Set(items.map((i) => i.platform).filter(Boolean))].sort();
   const cur = $('#fPlatform').value;
   $('#fPlatform').innerHTML = '<option value="">全部店舖</option>' + plats.map((p) => `<option ${p === cur ? 'selected' : ''}>${esc(p)}</option>`).join('');
+  const pickups = [...new Set(items.map((i) => pickupKey(i.delivery)))].sort();
+  const curPk = $('#fPickup').value;
+  $('#fPickup').innerHTML = '<option value="">全部取貨地點</option>' + pickups.map((k) => `<option ${k === curPk ? 'selected' : ''}>${esc(k)}</option>`).join('');
   $('#platforms').innerHTML = plats.map((p) => `<option value="${esc(p)}">`).join('');
 }
 
@@ -210,7 +216,7 @@ $('#aiFile').onchange = async (e) => {
     alert('AI 分析失敗：' + msg);
   }
 };
-for (const id of ['#q', '#fPlatform', '#fStatus', '#fCur', '#sort', '#showCancelled']) $(id).addEventListener('input', render);
+for (const id of ['#q', '#fPlatform', '#fPickup', '#fStatus', '#fCur', '#sort', '#showCancelled']) $(id).addEventListener('input', render);
 document.querySelectorAll('.view button').forEach((b) => b.onclick = () => {
   view = b.dataset.view;
   document.querySelectorAll('.view button').forEach((x) => x.classList.toggle('on', x === b));
