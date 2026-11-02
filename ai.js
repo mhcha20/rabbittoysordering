@@ -60,7 +60,9 @@ How to work:
    Budget your searches: once a result points to the official product page (or a news / press article with product photos), fetch it straight away.
 3. Return one entry per product the user could pre-order. If a post covers a whole line-up of many small variants (more than 6), group them into one entry and list the variants in notes.
 4. For photoUrls, only use image URLs that appear on pages you actually fetched (official page images, og:image, press-release images). Never guess or construct an image URL.
-5. Write notes and summary in Traditional Chinese (Hong Kong). Mention anything you are unsure about so the user can check it.`;
+5. Write notes and summary in Traditional Chinese (Hong Kong). Mention anything you are unsure about so the user can check it.
+6. The user lives in Hong Kong (HKT, UTC+8). Convert every date-time you write (deadlines, sale start times, lottery periods) to Hong Kong time and show the original next to it, e.g. 「香港時間 10:00（日本 11:00）」. Japan (JST) is 1 hour ahead of Hong Kong; check the time zone of other sources. If a time converts across midnight, use the Hong Kong date (also for deadline).
+   A sale that starts at a fixed time (first come, first served) with no pre-order period: put the sale start date (Hong Kong date) in deadline so the user gets a countdown, and say so in notes.`;
 
 const SYSTEM = `You help a collector in Hong Kong record pre-orders of toys and character goods (Precure, Chiikawa, Bandai, etc.).
 You receive screenshots of an order (order page, confirmation email, receipt) and must return one entry per distinct product line.
@@ -73,7 +75,8 @@ How to work:
 3. For photoUrls, only use image URLs that appear on pages you actually fetched (product page images, og:image, press-release images). Prefer the official shop. Never guess or construct an image URL. If none is found, return an empty list.
 4. If per-item prices are not shown, use the official prices you found; if you still cannot tell, split the order total sensibly and say so in notes. Make sure qty x price (+ shipping) adds up to the order total shown, when a total is shown.
 5. Map the order state to one of: ${STATUSES.join('、')}. "已付款" / paid but not shipped means 已下單; shipped means 已發貨; picked up / received means 已收貨.
-6. Write notes and summary in Traditional Chinese (Hong Kong). Mention anything you are unsure about so the user can check it.`;
+6. Write notes and summary in Traditional Chinese (Hong Kong). Mention anything you are unsure about so the user can check it.
+7. The user lives in Hong Kong (HKT, UTC+8). Convert every date-time you write (deadlines, sale start times, lottery periods) to Hong Kong time and show the original next to it, e.g. 「香港時間 10:00（日本 11:00）」. Japan (JST) is 1 hour ahead of Hong Kong; check the time zone of other sources. If a time converts across midnight, use the Hong Kong date (also for deadline).`;
 
 let client;
 function getClient() {
