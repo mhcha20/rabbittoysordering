@@ -31,8 +31,11 @@ window.SEED_ITEMS = [
   "shipDate": "2027/02",
   "delivery": "旺角交收中心自取 (EASY TRADE 萬事昌商業中心19樓)",
   "status": "已下單",
-  "notes": "",
-  "photos": []
+  "notes": "商品資料：https://hobby.dengeki.com/news/3126205/",
+  "photos": [
+   "https://makeshop-multi-images.akamaized.net/kuwanaya/itemimages/000000003187_Ls1jH7Q.jpg",
+   "https://www.nerdbrain.net/wp-content/uploads/2026/08/35d610f7e14b29ce21c9b729410308b9.webp"
+  ]
  },
  {
   "id": "seed-3",
@@ -85,8 +88,11 @@ window.SEED_ITEMS = [
   "shipDate": "2027年04月",
   "delivery": "日本國內配送 (Amazon Pay)",
   "status": "已確認",
-  "notes": "",
-  "photos": []
+  "notes": "SET2：キュアエクレール、キュアアルカナ。商品資料：https://www.inside-games.jp/article/2026/08/20/186437.html",
+  "photos": [
+   "https://www.inside-games.jp/imgs/zoom/1768972.jpg",
+   "https://www.inside-games.jp/imgs/zoom/1768966.jpg"
+  ]
  },
  {
   "id": "seed-6",
@@ -101,8 +107,14 @@ window.SEED_ITEMS = [
   "shipDate": "2027年01月",
   "delivery": "日本國內配送 (Amazon Pay)",
   "status": "已確認",
-  "notes": "",
-  "photos": []
+  "notes": "全8種。商品資料：https://www.inside-games.jp/article/2026/08/20/186452.html",
+  "photos": [
+   "https://www.inside-games.jp/imgs/zoom/1768948.jpg",
+   "https://www.inside-games.jp/imgs/zoom/1768944.jpg",
+   "https://www.inside-games.jp/imgs/zoom/1768945.jpg",
+   "https://www.inside-games.jp/imgs/zoom/1768946.jpg",
+   "https://www.inside-games.jp/imgs/zoom/1768947.jpg"
+  ]
  },
  {
   "id": "seed-7",
@@ -117,8 +129,12 @@ window.SEED_ITEMS = [
   "shipDate": "2027年05月",
   "delivery": "日本國內配送 (Amazon Pay)",
   "status": "已確認",
-  "notes": "",
-  "photos": []
+  "notes": "SET1：キュアアンサー、キュアミスティック、キュアアルカナ・シャドウ。商品資料：https://www.inside-games.jp/article/2026/08/20/186437.html",
+  "photos": [
+   "https://www.inside-games.jp/imgs/zoom/1768971.jpg",
+   "https://www.inside-games.jp/imgs/zoom/1768961.jpg",
+   "https://www.inside-games.jp/imgs/zoom/1768964.jpg"
+  ]
  },
  {
   "id": "seed-8",
