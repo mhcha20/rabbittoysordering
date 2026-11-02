@@ -192,16 +192,18 @@ async function parseOrder({ images, hint }) {
 async function parseWish({ link, images, hint }) {
   if (!/^https?:\/\//.test(link || '') && !(images || []).length) throw fail(400, '請貼上連結或者上傳截圖');
   const preview = link ? await linkPreview(link) : {};
-  const content = imageBlocks(images);
+  // The post's own picture usually shows the product even when the page itself needs a login: let Claude see it.
+  const postImage = preview.image ? await toDataUrl(preview.image) : null;
+  const content = imageBlocks(postImage && postImage.length < 5_000_000 ? [postImage, ...(images || [])] : images);
   content.push({ type: 'text', text: [
     `今日日期：${new Date().toISOString().slice(0, 10)}。`,
     link ? `連結：${link}` : '',
     preview.title || preview.description ? `連結預覽 — 標題：${preview.title || '（無）'}\n內容：${preview.description || '（無）'}` : '連結預覽：攞唔到（可能要登入）。',
+    postImage ? '第一張圖係帖文本身嘅圖（由連結預覽攞到），請睇圖認出商品（包裝、角色、品牌、文字）。' : '',
     hint ? `用戶補充：${hint}` : '',
     '請搵出呢個帖文介紹嘅商品資料（官方名稱、價錢、預訂截止、發售日、喺邊度預訂）同官方圖片。',
   ].filter(Boolean).join('\n') });
   const result = await checkPhotos(await runClaude({ system: WISH_SYSTEM, schema: WISH_SCHEMA, content }));
-  const postImage = preview.image ? await toDataUrl(preview.image) : null;
   for (const item of result.items) {
     Object.assign(item, { kind: 'wish', status: '想買', link: link || '', qty: 1, shipping: 0 });
     if (postImage) item.photos.push(postImage); // the post's own picture as a fallback / extra
