@@ -9,7 +9,7 @@ const hkNow = () => new Date(Date.now() + HK_OFFSET); // read with getUTC* to ge
 const hkDate = (d = hkNow()) => d.toISOString().slice(0, 10);
 const hkTimeToMs = (local) => Date.parse(`${local}:00+08:00`); // "YYYY-MM-DDTHH:MM" in Hong Kong time
 
-function createTelegram({ dataDir, getItems, publicUrl }) {
+function createTelegram({ dataDir, getItems, publicUrl, ask }) {
   const token = process.env.TELEGRAM_BOT_TOKEN || '';
   const stateFile = path.join(dataDir, 'telegram.json');
   let state = { chatId: process.env.TELEGRAM_CHAT_ID || '', sent: {}, offset: 0 };
@@ -17,9 +17,9 @@ function createTelegram({ dataDir, getItems, publicUrl }) {
   if (process.env.TELEGRAM_CHAT_ID) state.chatId = process.env.TELEGRAM_CHAT_ID;
   const save = () => fs.writeFileSync(stateFile, JSON.stringify(state));
 
-  async function call(method, body) {
+  async function call(method, body, timeoutMs = 15000) {
     const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs),
     });
     const j = await r.json().catch(() => ({}));
     if (!j.ok) throw new Error(j.description || `Telegram ${method} failed (${r.status})`);
@@ -34,19 +34,92 @@ function createTelegram({ dataDir, getItems, publicUrl }) {
     return `• <b>${esc(it.name)}</b>${esc(price)}\n  ${esc(it.platform || '')}${links ? '\n  ' + links : ''}`;
   }
 
-  // Remember the chat of whoever sends /start (only while no chat is linked yet).
-  async function pollForChat() {
-    if (state.chatId) return;
-    const updates = await call('getUpdates', { offset: state.offset, timeout: 0, allowed_updates: ['message'] });
-    for (const u of updates) {
-      state.offset = u.update_id + 1;
-      const chat = u.message?.chat;
-      if (chat && !state.chatId) {
-        state.chatId = String(chat.id);
-        await send('✅ 已連接「預訂商品記錄」。夠鐘預訂同截止前一日都會喺度通知你。');
+  // ---------- answering messages ----------
+  const live = () => getItems().filter((it) => !['已取消', '已放棄', '已收貨'].includes(it.status));
+  // When does the user next need to act on a wishlist item? (remind time, else deadline at 23:59)
+  function nextAction(it) {
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(it.remindAt || '')) return { at: hkTimeToMs(it.remindAt), label: `⏰ ${it.remindAt.slice(5, 10).replace('-', '/')} ${it.remindAt.slice(11)}` };
+    if (/^\d{4}-\d{2}-\d{2}/.test(it.deadline || '')) return { at: hkTimeToMs(`${it.deadline.slice(0, 10)}T23:59`), label: `📅 ${it.deadline.slice(5, 10).replace('-', '/')} 截止` };
+    return null;
+  }
+  function countdown(ms) {
+    const m = Math.max(0, Math.round(ms / 60e3)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+    return d ? `${d} 日 ${h} 個鐘後` : h ? `${h} 個鐘 ${m % 60} 分鐘後` : `${m} 分鐘後`;
+  }
+  function replyNext(limit = 5) {
+    const now = Date.now();
+    const upcoming = live().filter((it) => it.kind === 'wish').map((it) => ({ it, a: nextAction(it) }))
+      .filter((x) => x.a && x.a.at > now).sort((x, y) => x.a.at - y.a.at);
+    if (!upcoming.length) return '暫時冇排咗時間嘅預訂 🙂\n（喺網站「💭 想預訂」幫商品設「提醒時間」或「預訂截止」就會出現喺度）';
+    const groups = [];
+    for (const x of upcoming) {
+      const g = groups.find((g) => g.label === x.a.label);
+      if (g) g.items.push(x.it); else groups.push({ label: x.a.label, at: x.a.at, items: [x.it] });
+    }
+    return `<b>最近要預訂</b>（香港時間）\n\n` + groups.slice(0, limit).map((g) =>
+      `<b>${esc(g.label)}</b>（${countdown(g.at - now)}）\n${g.items.map(itemLine).join('\n')}`).join('\n\n');
+  }
+  function replyWish() {
+    const w = live().filter((it) => it.kind === 'wish');
+    if (!w.length) return '想預訂清單係空嘅。';
+    return `<b>💭 想預訂（${w.length} 件）</b>\n\n` + w.map((it) => {
+      const a = nextAction(it);
+      return itemLine(it) + (a ? `\n  ${esc(a.label)}` : '');
+    }).join('\n\n');
+  }
+  function replyPending() {
+    const o = live().filter((it) => it.kind !== 'wish');
+    if (!o.length) return '冇未收貨嘅訂單 🎉';
+    return `<b>📦 未收貨（${o.length} 件）</b>\n\n` + o.map((it) =>
+      `• ${esc(it.name.slice(0, 50))}\n  ${esc(it.platform || '')} ・ ${esc(it.status)} ・ 預計 ${esc(it.shipDate || '—')}`).join('\n');
+  }
+  const HELP = '你可以問我：\n/next — 最近要預訂嘅商品同倒數\n/wish — 全部想預訂\n/pending — 未收貨訂單\n或者直接打字問，例如「GU 嗰三個幾時到？」';
+
+  async function sendLong(text, html = true) {
+    for (let i = 0; i < text.length; i += 3800) {
+      const part = text.slice(i, i + 3800);
+      await call('sendMessage', { chat_id: state.chatId, text: part, disable_web_page_preview: true, ...(html ? { parse_mode: 'HTML' } : {}) });
+    }
+  }
+
+  async function handleMessage(msg) {
+    const chatId = String(msg.chat.id);
+    if (!state.chatId) {
+      state.chatId = chatId; save();
+      await send(`✅ 已連接「預訂商品記錄」。夠鐘預訂同截止前一日都會喺度通知你。\n\n${HELP}`);
+      return;
+    }
+    if (chatId !== state.chatId) { await send('呢個 bot 只供主人使用。', chatId); return; }
+    const text = (msg.text || '').trim();
+    if (!text) return;
+    const cmd = text.split(/[\s@]/)[0].toLowerCase();
+    if (cmd === '/start' || cmd === '/help') return send(HELP);
+    if (cmd === '/next' || /^(下次|最近|幾時|下一次)|幾時(預訂|開賣|截止|落單)|要(預訂|買)咩/.test(text)) return sendLong(replyNext());
+    if (cmd === '/wish') return sendLong(replyWish());
+    if (cmd === '/pending') return sendLong(replyPending());
+    if (!ask) return send(HELP);
+    await call('sendChatAction', { chat_id: state.chatId, action: 'typing' }).catch(() => {});
+    try {
+      await sendLong(await ask(text, getItems()), false);
+    } catch (e) {
+      await send(`答唔到：${esc(e.message)}\n\n${HELP}`);
+    }
+  }
+
+  // Long-poll Telegram for messages (only one poller per bot; a redeploy may briefly overlap, so retry).
+  async function pollLoop() {
+    for (;;) {
+      try {
+        const updates = await call('getUpdates', { offset: state.offset, timeout: 50, allowed_updates: ['message'] }, 65000);
+        for (const u of updates) {
+          state.offset = u.update_id + 1; save();
+          if (u.message?.chat) await handleMessage(u.message).catch((e) => console.error('telegram reply:', e.message));
+        }
+      } catch (e) {
+        if (!/abort|timeout/i.test(e.message)) console.error('telegram poll:', e.message);
+        await new Promise((r) => setTimeout(r, 5000));
       }
     }
-    save();
   }
 
   async function check() {
@@ -80,9 +153,16 @@ function createTelegram({ dataDir, getItems, publicUrl }) {
 
   function start() {
     if (!token) { console.log('telegram: TELEGRAM_BOT_TOKEN not set, reminders off'); return; }
-    const tick = () => pollForChat().then(check).catch((e) => console.error('telegram:', e.message));
+    const tick = () => check().catch((e) => console.error('telegram:', e.message));
     tick();
     setInterval(tick, 60e3).unref();
+    pollLoop();
+    call('setMyCommands', { commands: [
+      { command: 'next', description: '最近要預訂嘅商品' },
+      { command: 'wish', description: '全部想預訂' },
+      { command: 'pending', description: '未收貨訂單' },
+      { command: 'help', description: '用法' },
+    ] }).catch(() => {});
     console.log(`telegram: reminders on${state.chatId ? '' : ' (waiting for /start)'}`);
   }
 
@@ -91,7 +171,6 @@ function createTelegram({ dataDir, getItems, publicUrl }) {
     status: () => ({ configured: !!token, linked: !!state.chatId }),
     async test() {
       if (!token) throw Object.assign(new Error('未設定 TELEGRAM_BOT_TOKEN'), { status: 503 });
-      if (!state.chatId) await pollForChat();
       if (!state.chatId) throw Object.assign(new Error('Bot 未連接：請喺 Telegram 打開你個 bot 撳「開始」（或者傳 /start），再試一次。'), { status: 409 });
       await send('🔔 測試通知：Telegram 提醒運作正常。');
       return { ok: true };

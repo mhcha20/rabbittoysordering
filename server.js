@@ -4,7 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { parseOrder, parseWish } = require('./ai');
+const { parseOrder, parseWish, answerQuestion } = require('./ai');
 const { createTelegram } = require('./telegram');
 
 const PORT = process.env.PORT || 3000;
@@ -37,6 +37,7 @@ persist();
 const telegram = createTelegram({
   dataDir: DATA_DIR,
   getItems: () => items,
+  ask: process.env.ANTHROPIC_API_KEY ? answerQuestion : null,
   publicUrl: process.env.PUBLIC_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/` : ''),
 });
 telegram.start();

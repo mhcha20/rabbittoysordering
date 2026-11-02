@@ -212,4 +212,33 @@ async function parseWish({ link, images, hint }) {
   return result;
 }
 
-module.exports = { parseOrder, parseWish };
+// Answer a free-text question from Telegram using the user's own records.
+async function answerQuestion(question, items) {
+  const anthropic = getClient();
+  const records = items.map((it) => ({
+    種類: it.kind === 'wish' ? '想預訂' : '訂單', 狀態: it.status, 商品: it.name, 店舖: it.platform, 訂單編號: it.orderNo || undefined,
+    下單日期: it.orderDate || undefined, 數量: it.qty, 幣別: it.currency, 單價: it.price, 運費: it.shipping || undefined,
+    預計發貨或發售: it.shipDate || undefined, 預訂截止: it.deadline || undefined, 提醒時間HKT: it.remindAt || undefined,
+    取貨: it.delivery || undefined, 收貨日期: it.receivedAt || undefined, 預訂頁: it.orderUrl || undefined,
+    備註: it.notes ? it.notes.slice(0, 300) : undefined,
+  }));
+  const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+  const response = await anthropic.beta.messages.create({
+    model: MODEL,
+    max_tokens: 4000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'low' },
+    system: `You answer questions on Telegram about a Hong Kong collector's toy orders and pre-order wishlist, using only the records given.
+Reply in Cantonese (Traditional Chinese, Hong Kong), short and friendly, plain text (no Markdown, no HTML), suitable for a phone chat.
+Times are Hong Kong time. Cancelled (已取消) and abandoned (已放棄) items only count if the question is about them. If the records don't answer the question, say so.`,
+    messages: [{ role: 'user', content: [
+      { type: 'text', text: `而家香港時間：${now}\n\n我嘅記錄（JSON）：\n${JSON.stringify(records)}` },
+      { type: 'text', text: `問題：${question}` },
+    ] }],
+  });
+  if (response.stop_reason === 'refusal') throw fail(422, 'AI 未能回答呢條問題');
+  return response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim() || '（冇答案）';
+}
+
+module.exports = { parseOrder, parseWish, answerQuestion };
