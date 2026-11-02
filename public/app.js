@@ -236,6 +236,7 @@ $('#form').addEventListener('submit', (e) => {
   }).catch(showError).finally(() => { busy = false; });
 });
 $('#btnCancel').onclick = () => $('#dlg').close();
+$('#dlgX').onclick = () => $('#dlg').close();
 $('#btnDelete').onclick = () => {
   if (!confirm('確定刪除這個商品記錄？')) return;
   const id = editing.id;
