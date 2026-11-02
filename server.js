@@ -4,7 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { parseOrder } = require('./ai');
+const { parseOrder, parseWish } = require('./ai');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -22,7 +22,7 @@ function loadSeed() {
 }
 let items;
 try { items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8')); } catch { items = loadSeed(); }
-items = items.map((it) => ({ ...it, ...receivedFields(it) }));
+items = items.map((it) => ({ kind: 'order', link: '', deadline: '', ...it, ...receivedFields(it) }));
 let version = Date.now();
 
 function persist() {
@@ -47,7 +47,7 @@ function storePhotos(item) {
 }
 
 // Status "已收貨" carries the date it was received and the status to go back to if it is un-ticked.
-const hkToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+function hkToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
 function receivedFields(raw) {
   if (raw.status === '已到貨') raw.status = '已收貨'; // old name
   const received = raw.status === '已收貨';
@@ -57,11 +57,14 @@ function receivedFields(raw) {
   };
 }
 
+const CURRENCIES = ['HKD', 'JPY', 'CNY', 'TWD', 'USD'];
+
 function cleanItem(raw) {
   const s = (v) => (v == null ? '' : String(v));
   return storePhotos({
     id: s(raw.id) || 'i' + Date.now(), platform: s(raw.platform), orderNo: s(raw.orderNo), orderDate: s(raw.orderDate),
-    name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: raw.currency === 'HKD' ? 'HKD' : 'JPY',
+    kind: raw.kind === 'wish' ? 'wish' : 'order', link: /^https?:\/\//.test(s(raw.link)) ? s(raw.link) : '', deadline: s(raw.deadline),
+    name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: CURRENCIES.includes(raw.currency) ? raw.currency : 'JPY',
     price: Number(raw.price) || 0, shipping: Number(raw.shipping) || 0, shipDate: s(raw.shipDate), delivery: s(raw.delivery),
     status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos,
     ...receivedFields(raw),
@@ -129,6 +132,11 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const images = Array.isArray(body?.images) ? body.images.slice(0, 6) : [];
       return send(res, 200, await parseOrder({ images, hint: String(body?.hint || '').slice(0, 500) }));
+    }
+    if (p === '/api/ai/link' && req.method === 'POST') {
+      const body = await readBody(req);
+      const images = Array.isArray(body?.images) ? body.images.slice(0, 4) : [];
+      return send(res, 200, await parseWish({ link: String(body?.link || '').trim().slice(0, 2000), images, hint: String(body?.hint || '').slice(0, 500) }));
     }
     if (p.startsWith('/photos/') && req.method === 'GET') {
       const name = path.basename(p);

@@ -111,3 +111,21 @@ td .recv{margin-top:4px}
 @media (prefers-color-scheme:dark){.pic{background:#2f262a}}
 .pic img,.pic .slides img{width:100%;height:100%;min-width:0;object-fit:contain;display:block}
 .pic .slides{position:absolute;inset:0}
+
+/* tabs: orders / wishlist */
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tabs button{flex:1;font-size:16px;padding:10px;border-radius:12px}
+.tabs button.on{background:var(--pink);border-color:var(--pink);color:#fff}
+.pill{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:rgba(0,0,0,.12);font-size:13px}
+.s-想買{background:#e76fa8}.s-已放棄{background:#999}
+.card.dropped{opacity:.55}
+.deadline.soon{color:var(--bad);font-weight:700}
+.deadline.over{color:var(--muted);text-decoration:line-through}
+.postlink{color:var(--pink-d);text-decoration:none;font-size:13px}
+.ordered{font-size:13px;padding:4px 10px;border-radius:999px;white-space:nowrap}
+form[data-kind=wish] .orderOnly{display:none}
+form[data-kind=order] .wishOnly{display:none}
+.linkForm{grid-template-columns:1fr}
+@media(max-width:640px){.tableWrap td:nth-child(7) .ordered{margin-top:0}}
+
+[hidden]{display:none!important}

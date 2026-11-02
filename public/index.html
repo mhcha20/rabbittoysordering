@@ -10,7 +10,8 @@
 <header class="top">
   <h1>🐰 預訂商品記錄</h1>
   <div class="actions">
-    <label class="btn primary">📷 截圖自動新增<input type="file" id="aiFile" accept="image/*" multiple hidden></label>
+    <label class="btn primary" id="aiFileBtn">📷 截圖自動新增<input type="file" id="aiFile" accept="image/*" multiple hidden></label>
+    <button id="btnLink" class="primary" hidden>🔗 貼連結新增</button>
     <button id="btnAdd">＋ 手動新增</button>
     <button id="btnExport">匯出備份</button>
     <label class="btn">匯入備份<input type="file" id="fileImport" accept="application/json" hidden></label>
@@ -18,6 +19,11 @@
 </header>
 
 <main>
+  <nav class="tabs">
+    <button data-tab="order" class="on">📦 我的訂單</button>
+    <button data-tab="wish">💭 想預訂 <span id="wishCount" class="pill"></span></button>
+  </nav>
+
   <section id="summary" class="summary"></section>
 
   <section class="filters">
@@ -54,15 +60,17 @@
     <label class="wide">商品名稱<input name="name" required></label>
     <label>購買平台 / 店舖<input name="platform" list="platforms"></label>
     <datalist id="platforms"></datalist>
-    <label>訂單編號<input name="orderNo"></label>
-    <label>下單日期<input name="orderDate" type="text" placeholder="2026-10-23"></label>
-    <label>預計發貨 / 交收<input name="shipDate" placeholder="2027-01 或 2027年01月"></label>
+    <label class="orderOnly">訂單編號<input name="orderNo"></label>
+    <label class="orderOnly">下單日期<input name="orderDate" type="text" placeholder="2026-10-23"></label>
+    <label class="wishOnly">預訂截止<input name="deadline" type="date"></label>
+    <label>預計發貨 / 發售<input name="shipDate" placeholder="2027-01 或 2027年01月"></label>
     <label>數量<input name="qty" type="number" min="1" value="1" required></label>
-    <label>幣別<select name="currency"><option>JPY</option><option>HKD</option></select></label>
+    <label>幣別<select name="currency"><option>JPY</option><option>HKD</option><option>CNY</option><option>TWD</option><option>USD</option></select></label>
     <label>單價<input name="price" type="number" min="0" step="any" required></label>
-    <label>運費<input name="shipping" type="number" min="0" step="any" value="0"></label>
+    <label class="orderOnly">運費<input name="shipping" type="number" min="0" step="any" value="0"></label>
     <label>狀態<select name="status"></select></label>
-    <label class="wide">取貨 / 配送方式<input name="delivery"></label>
+    <label class="wide orderOnly">取貨 / 配送方式<input name="delivery"></label>
+    <label class="wide">相關連結（原帖 / 商品頁）<input name="link" type="url" placeholder="https://…"></label>
     <label class="wide">備註 / 詳細資訊<textarea name="notes" rows="3" placeholder="款式、尺寸、商品連結、收件資料…"></textarea></label>
     <div class="formBtns">
       <button type="button" id="btnDelete" class="danger">刪除</button>
@@ -75,8 +83,19 @@
 
 <dialog id="aiBusy" class="busy">
   <div class="spinner"></div>
-  <p><b>AI 分析緊截圖，同時上網搵商品資料同相…</b></p>
+  <p><b>AI 分析緊，同時上網搵商品資料同相…</b></p>
   <p class="meta">大約需要 1–3 分鐘，請唔好關閉呢個頁面。</p>
+</dialog>
+
+<dialog id="linkDlg">
+  <form id="linkForm" method="dialog" class="linkForm">
+    <h2>🔗 貼連結新增想預訂商品</h2>
+    <label class="wide">帖文 / 商品連結<input name="link" type="url" placeholder="https://www.instagram.com/p/…" required></label>
+    <label class="wide">截圖（可選，Instagram 要登入先睇到時有用）<input name="shots" type="file" accept="image/*" multiple></label>
+    <label class="wide">補充（可選）<input name="hint" placeholder="例如：想要藍色款"></label>
+    <p class="meta wide">AI 會打開連結、上網搵官方資料同相，大約 1–3 分鐘。</p>
+    <div class="formBtns"><span class="grow"></span><button type="button" id="linkCancel">取消</button><button type="submit" class="primary" value="ok">開始搵資料</button></div>
+  </form>
 </dialog>
 
 <dialog id="lightbox"><img id="lbImg" alt=""><button id="lbClose">✕</button></dialog>
