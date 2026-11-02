@@ -1,0 +1,127 @@
+// Rabbit toys pre-order tracker — zero-dependency Node server.
+// Data: $DATA_DIR/items.json, photos: $DATA_DIR/photos/*. Access is protected by APP_PASSWORD (HTTP Basic auth).
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const PORT = process.env.PORT || 3000;
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const PASSWORD = process.env.APP_PASSWORD || '';
+const PUBLIC = path.join(__dirname, 'public');
+const ITEMS_FILE = path.join(DATA_DIR, 'items.json');
+const PHOTO_DIR = path.join(DATA_DIR, 'photos');
+const MAX_BODY = 50 * 1024 * 1024;
+
+fs.mkdirSync(PHOTO_DIR, { recursive: true });
+
+function loadSeed() {
+  const src = fs.readFileSync(path.join(PUBLIC, 'seed.js'), 'utf8');
+  return JSON.parse(src.slice(src.indexOf('['), src.lastIndexOf(']') + 1));
+}
+let items;
+try { items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8')); } catch { items = loadSeed(); }
+let version = Date.now();
+
+function persist() {
+  const tmp = ITEMS_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(items));
+  fs.renameSync(tmp, ITEMS_FILE);
+  version = Date.now();
+}
+persist();
+
+// Turn embedded data: URLs into stored files so items.json stays small.
+function storePhotos(item) {
+  item.photos = (Array.isArray(item.photos) ? item.photos : []).map((p) => {
+    const m = /^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/s.exec(p || '');
+    if (!m) return p;
+    const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+    const name = crypto.randomUUID() + '.' + ext;
+    fs.writeFileSync(path.join(PHOTO_DIR, name), Buffer.from(m[2], 'base64'));
+    return '/photos/' + name;
+  });
+  return item;
+}
+
+function cleanItem(raw) {
+  const s = (v) => (v == null ? '' : String(v));
+  return storePhotos({
+    id: s(raw.id) || 'i' + Date.now(), platform: s(raw.platform), orderNo: s(raw.orderNo), orderDate: s(raw.orderDate),
+    name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: raw.currency === 'HKD' ? 'HKD' : 'JPY',
+    price: Number(raw.price) || 0, shipping: Number(raw.shipping) || 0, shipDate: s(raw.shipDate), delivery: s(raw.delivery),
+    status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos,
+  });
+}
+
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
+
+function send(res, code, body, type = 'application/json; charset=utf-8', extra = {}) {
+  res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store', ...extra });
+  res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
+}
+function serveFile(res, file, cache) {
+  fs.readFile(file, (err, buf) => {
+    if (err) return send(res, 404, { error: 'not found' });
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': cache });
+    res.end(buf);
+  });
+}
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', (c) => { size += c.length; if (size > MAX_BODY) { reject(new Error('too large')); req.destroy(); } else chunks.push(c); });
+    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')); } catch (e) { reject(e); } });
+    req.on('error', reject);
+  });
+}
+function authorized(req) {
+  if (!PASSWORD) return true;
+  const m = /^Basic (.+)$/.exec(req.headers.authorization || '');
+  if (!m) return false;
+  const pass = Buffer.from(m[1], 'base64').toString('utf8').split(':').slice(1).join(':');
+  const a = Buffer.from(pass), b = Buffer.from(PASSWORD);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://x');
+  const p = decodeURIComponent(url.pathname);
+  if (p === '/healthz') return send(res, 200, { ok: true });
+  if (!authorized(req)) return send(res, 401, '請輸入密碼', 'text/plain; charset=utf-8', { 'WWW-Authenticate': 'Basic realm="rabbit-toys", charset="UTF-8"' });
+
+  try {
+    if (p === '/api/items' && req.method === 'GET') return send(res, 200, { version, items });
+    if (p === '/api/items' && req.method === 'PUT') { // replace everything (import backup)
+      const data = await readBody(req);
+      if (!Array.isArray(data)) return send(res, 400, { error: 'expected array' });
+      items = data.map(cleanItem); persist();
+      return send(res, 200, { version, items });
+    }
+    const m = /^\/api\/items\/([^/]+)$/.exec(p);
+    if (m && req.method === 'PUT') {
+      const item = cleanItem({ ...(await readBody(req)), id: m[1] });
+      const i = items.findIndex((x) => x.id === item.id);
+      if (i >= 0) items[i] = item; else items.unshift(item);
+      persist();
+      return send(res, 200, { version, item });
+    }
+    if (m && req.method === 'DELETE') {
+      items = items.filter((x) => x.id !== m[1]); persist();
+      return send(res, 200, { version });
+    }
+    if (p.startsWith('/photos/') && req.method === 'GET') {
+      const name = path.basename(p);
+      return serveFile(res, path.join(PHOTO_DIR, name), 'private, max-age=31536000, immutable');
+    }
+    if (req.method === 'GET') {
+      const file = path.join(PUBLIC, p === '/' ? 'index.html' : path.normalize(p).replace(/^([/\\])+/, ''));
+      if (!file.startsWith(PUBLIC)) return send(res, 403, { error: 'forbidden' });
+      return serveFile(res, file, 'no-cache');
+    }
+    send(res, 404, { error: 'not found' });
+  } catch (e) {
+    send(res, e.message === 'too large' ? 413 : 400, { error: String(e.message || e) });
+  }
+}).listen(PORT, () => console.log(`listening on ${PORT}, data in ${DATA_DIR}, password ${PASSWORD ? 'on' : 'OFF'}`));

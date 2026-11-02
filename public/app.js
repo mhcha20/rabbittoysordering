@@ -5,37 +5,22 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const fmt = (cur, n) => (cur === 'JPY' ? '¥' : 'HK$') + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
 const total = (it) => it.price * it.qty + it.shipping;
 
-// ---------- storage (IndexedDB, falls back to memory) ----------
-const DB = {
-  db: null,
-  open() {
-    return new Promise((res) => {
-      try {
-        const r = indexedDB.open('rabbit-toys', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('kv');
-        r.onsuccess = () => { this.db = r.result; res(); };
-        r.onerror = () => res();
-      } catch { res(); }
-    });
-  },
-  get() {
-    return new Promise((res) => {
-      if (!this.db) return res(null);
-      const q = this.db.transaction('kv').objectStore('kv').get('items');
-      q.onsuccess = () => res(q.result || null);
-      q.onerror = () => res(null);
-    });
-  },
-  set(v) {
-    if (!this.db) return;
-    this.db.transaction('kv', 'readwrite').objectStore('kv').put(v, 'items');
-  },
-};
+// ---------- storage (server API, shared by every device) ----------
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+}
+const showError = (e) => alert('儲存失敗，請檢查網絡後再試。\n' + (e.message || e));
 
 let items = [];
 let editing = null; // item being edited (draft copy)
 let view = 'grid';
-const save = () => DB.set(items);
+let busy = false;
+async function refresh() {
+  if (busy || $('#dlg').open) return;
+  try { items = (await api('GET', '/api/items')).items; render(); } catch { /* offline: keep what we have */ }
+}
 
 // ---------- helpers ----------
 function shipKey(s) {
@@ -152,15 +137,22 @@ $('#form').addEventListener('submit', (e) => {
     shipDate: f.shipDate.value.trim(), qty: Math.max(1, +f.qty.value || 1), currency: f.currency.value, price: +f.price.value || 0,
     shipping: +f.shipping.value || 0, status: f.status.value, delivery: f.delivery.value.trim(), notes: f.notes.value,
   });
-  const i = items.findIndex((x) => x.id === editing.id);
-  if (i >= 0) items[i] = editing; else items.unshift(editing);
-  save(); render();
+  const draft = editing;
+  busy = true;
+  api('PUT', '/api/items/' + encodeURIComponent(draft.id), draft).then(({ item }) => {
+    const i = items.findIndex((x) => x.id === item.id);
+    if (i >= 0) items[i] = item; else items.unshift(item);
+    render();
+  }).catch(showError).finally(() => { busy = false; });
 });
 $('#btnCancel').onclick = () => $('#dlg').close();
 $('#btnDelete').onclick = () => {
   if (!confirm('確定刪除這個商品記錄？')) return;
-  items = items.filter((x) => x.id !== editing.id);
-  save(); render(); $('#dlg').close();
+  const id = editing.id;
+  $('#dlg').close();
+  api('DELETE', '/api/items/' + encodeURIComponent(id)).then(() => {
+    items = items.filter((x) => x.id !== id); render();
+  }).catch(showError);
 };
 $('#photoFile').onchange = async (e) => {
   for (const file of e.target.files) {
@@ -194,9 +186,17 @@ document.querySelectorAll('.view button').forEach((b) => b.onclick = () => {
 });
 
 // ---------- backup ----------
-$('#btnExport').onclick = () => {
+const toDataUrl = async (src) => {
+  const blob = await (await fetch(src)).blob();
+  return new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+};
+$('#btnExport').onclick = async () => {
+  // embed uploaded photos so the backup file is self-contained
+  const out = await Promise.all(items.map(async (it) => ({
+    ...it, photos: await Promise.all(it.photos.map((p) => (p.startsWith('/photos/') ? toDataUrl(p).catch(() => p) : p))),
+  })));
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(items)], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: 'application/json' }));
   a.download = `預訂商品備份-${new Date().toISOString().slice(0, 10)}.json`;
   a.click(); URL.revokeObjectURL(a.href);
 };
@@ -207,26 +207,18 @@ $('#fileImport').onchange = async (e) => {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data)) throw 0;
     if (!confirm(`匯入 ${data.length} 筆資料，會取代目前所有記錄，確定？`)) return;
-    items = data.map((d) => ({ photos: [], notes: '', ...d }));
-    save(); render();
+    items = (await api('PUT', '/api/items', data.map((d) => ({ photos: [], notes: '', ...d })))).items;
+    render();
   } catch { alert('備份檔格式不正確'); }
 };
 
 // ---------- init ----------
 (async () => {
   $('#fStatus').innerHTML += STATUSES.map((s) => `<option>${s}</option>`).join('');
-  await DB.open();
-  const stored = await DB.get();
-  items = stored || JSON.parse(JSON.stringify(window.SEED_ITEMS));
-  // fill in photos/notes added to the seed data later, without overwriting the user's own
-  const seedById = new Map(window.SEED_ITEMS.map((s) => [s.id, s]));
-  for (const it of items) {
-    const s = seedById.get(it.id);
-    if (!s) continue;
-    if (!it.photos?.length && s.photos.length) it.photos = [...s.photos];
-    if (!it.notes && s.notes) it.notes = s.notes;
-  }
-  save();
-  render();
+  await refresh();
+  // keep every device in sync
+  setInterval(refresh, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  $('#dlg').addEventListener('close', () => setTimeout(refresh, 500));
 })();
 })();

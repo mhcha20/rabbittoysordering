@@ -1,0 +1,13 @@
+{
+  "name": "rabbittoysordering",
+  "version": "1.0.0",
+  "private": true,
+  "description": "預訂商品記錄 — pre-order tracker with photos, synced across devices",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
