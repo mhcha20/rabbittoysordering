@@ -13,6 +13,7 @@
     <label class="btn primary" id="aiFileBtn">📷 截圖自動新增<input type="file" id="aiFile" accept="image/*" multiple hidden></label>
     <button id="btnLink" class="primary" hidden>🔗 貼連結新增</button>
     <button id="btnAdd">＋ 手動新增</button>
+    <button id="btnTg" title="Telegram 通知">🔔 通知</button>
     <button id="btnExport">匯出備份</button>
     <label class="btn">匯入備份<input type="file" id="fileImport" accept="application/json" hidden></label>
   </div>
@@ -63,6 +64,7 @@
     <label class="orderOnly">訂單編號<input name="orderNo"></label>
     <label class="orderOnly">下單日期<input name="orderDate" type="text" placeholder="2026-10-23"></label>
     <label class="wishOnly">預訂截止<input name="deadline" type="date"></label>
+    <label class="wide">⏰ 提醒時間（香港時間，Telegram 會喺 15 分鐘前同夠鐘時通知）<input name="remindAt" type="datetime-local"></label>
     <label>預計發貨 / 發售<input name="shipDate" placeholder="2027-01 或 2027年01月"></label>
     <label>數量<input name="qty" type="number" min="1" value="1" required></label>
     <label>幣別<select name="currency"><option>JPY</option><option>HKD</option><option>CNY</option><option>TWD</option><option>USD</option></select></label>

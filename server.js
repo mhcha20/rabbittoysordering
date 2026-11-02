@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { parseOrder, parseWish } = require('./ai');
+const { createTelegram } = require('./telegram');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -22,7 +23,7 @@ function loadSeed() {
 }
 let items;
 try { items = JSON.parse(fs.readFileSync(ITEMS_FILE, 'utf8')); } catch { items = loadSeed(); }
-items = items.map((it) => ({ kind: 'order', link: '', orderUrl: '', deadline: '', ...it, ...receivedFields(it) }));
+items = items.map((it) => ({ kind: 'order', link: '', orderUrl: '', deadline: '', remindAt: '', ...it, ...receivedFields(it) }));
 let version = Date.now();
 
 function persist() {
@@ -32,6 +33,13 @@ function persist() {
   version = Date.now();
 }
 persist();
+
+const telegram = createTelegram({
+  dataDir: DATA_DIR,
+  getItems: () => items,
+  publicUrl: process.env.PUBLIC_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/` : ''),
+});
+telegram.start();
 
 // Turn embedded data: URLs into stored files so items.json stays small.
 function storePhotos(item) {
@@ -63,7 +71,7 @@ function cleanItem(raw) {
   const s = (v) => (v == null ? '' : String(v));
   return storePhotos({
     id: s(raw.id) || 'i' + Date.now(), platform: s(raw.platform), orderNo: s(raw.orderNo), orderDate: s(raw.orderDate),
-    kind: raw.kind === 'wish' ? 'wish' : 'order', link: /^https?:\/\//.test(s(raw.link)) ? s(raw.link) : '', orderUrl: /^https?:\/\//.test(s(raw.orderUrl)) ? s(raw.orderUrl) : '', deadline: s(raw.deadline),
+    kind: raw.kind === 'wish' ? 'wish' : 'order', link: /^https?:\/\//.test(s(raw.link)) ? s(raw.link) : '', orderUrl: /^https?:\/\//.test(s(raw.orderUrl)) ? s(raw.orderUrl) : '', deadline: s(raw.deadline), remindAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s(raw.remindAt)) ? s(raw.remindAt) : '',
     name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: CURRENCIES.includes(raw.currency) ? raw.currency : 'JPY',
     price: Number(raw.price) || 0, shipping: Number(raw.shipping) || 0, shipDate: s(raw.shipDate), delivery: s(raw.delivery),
     status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos,
@@ -138,6 +146,8 @@ const server = http.createServer(async (req, res) => {
       const images = Array.isArray(body?.images) ? body.images.slice(0, 4) : [];
       return send(res, 200, await parseWish({ link: String(body?.link || '').trim().slice(0, 2000), images, hint: String(body?.hint || '').slice(0, 500) }));
     }
+    if (p === '/api/telegram' && req.method === 'GET') return send(res, 200, telegram.status());
+    if (p === '/api/telegram/test' && req.method === 'POST') return send(res, 200, await telegram.test());
     if (p.startsWith('/photos/') && req.method === 'GET') {
       const name = path.basename(p);
       return serveFile(res, path.join(PHOTO_DIR, name), 'private, max-age=31536000, immutable');

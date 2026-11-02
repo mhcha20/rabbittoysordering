@@ -147,3 +147,4 @@ input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100
   .formBtns button{flex:1;padding:12px}
   .formBtns .grow{display:none}
 }
+.meta.remind{color:var(--pink-d);font-weight:600}

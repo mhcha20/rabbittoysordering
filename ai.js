@@ -39,7 +39,7 @@ const resultSchema = (itemSchema) => ({
 const WISH_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['name', 'platform', 'currency', 'price', 'shipDate', 'deadline', 'notes', 'photoUrls', 'orderUrl'],
+  required: ['name', 'platform', 'currency', 'price', 'shipDate', 'deadline', 'notes', 'photoUrls', 'orderUrl', 'remindAt'],
   properties: {
     name: { type: 'string', description: 'Official product name (keep original Japanese, add Chinese in brackets if helpful)' },
     platform: { type: 'string', description: 'Where it can be pre-ordered (official shop / store), or the maker if unknown' },
@@ -49,6 +49,7 @@ const WISH_SCHEMA = {
     deadline: { type: 'string', description: 'Pre-order deadline as YYYY-MM-DD (add time in notes), or empty if none / unknown' },
     notes: { type: 'string', description: 'Traditional Chinese: what it is, variants, pre-order period and how/where to order, official page URL, anything uncertain' },
     orderUrl: { type: 'string', description: 'URL of the page where this exact product is (or was) ordered / pre-ordered: the official shop or the shop in the screenshot, empty if not found' },
+    remindAt: { type: 'string', description: 'Hong Kong local date-time YYYY-MM-DDTHH:MM when the user should act (pre-order / sale / lottery opens), only if that moment is still in the future; otherwise empty' },
     photoUrls: { type: 'array', items: { type: 'string' }, description: 'Direct image URLs (jpg/png/webp) of this exact product, taken from pages you fetched' },
   },
 };

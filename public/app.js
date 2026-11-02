@@ -73,6 +73,7 @@ function deadlineText(it) {
   const cls = d === null ? '' : d < 0 ? 'over' : d <= 7 ? 'soon' : '';
   return `<span class="deadline ${cls}">預訂截止：${esc(it.deadline)}${when}</span>`;
 }
+const remindText = (it) => (it.remindAt ? `<div class="meta remind">⏰ 提醒：${esc(it.remindAt.slice(5, 10).replace('-', '/'))} ${esc(it.remindAt.slice(11))}（香港時間）</div>` : '');
 const postLink = (it) => (it.link ? `<a class="postlink" href="${esc(it.link)}" target="_blank" rel="noopener">🔗 原帖</a>` : '');
 const shopLink = (it) => (it.orderUrl ? `<a class="postlink shop" href="${esc(it.orderUrl)}" target="_blank" rel="noopener">🛒 預訂頁</a>` : '');
 const orderedBtn = (it) => (it.status === '已放棄' ? '' : `<button type="button" class="ordered" data-ordered="${esc(it.id)}" title="已經落咗單，轉去我的訂單">✓ 已落單</button>`);
@@ -165,6 +166,7 @@ function render() {
           <h3>${esc(it.name)}</h3>
           <div class="meta">${esc(it.platform)}</div>
           <div class="meta">${deadlineText(it)}</div>
+          ${remindText(it)}
           <div class="meta">預計發售：${esc(it.shipDate || '—')}</div>
           <div class="price">${it.price ? fmt(it.currency, it.price) : '價錢未知'}</div>
           <div class="links">${shopLink(it)}${postLink(it)}</div>` : `
@@ -210,7 +212,7 @@ function openEditor(it, { isNew = !it, title } = {}) {
   const f = $('#form');
   f.dataset.kind = kindOf(editing);
   f.status.innerHTML = statusesFor(kindOf(editing)).map((s) => `<option>${s}</option>`).join('');
-  for (const k of ['name', 'platform', 'orderNo', 'orderDate', 'shipDate', 'qty', 'currency', 'price', 'shipping', 'status', 'delivery', 'notes', 'link', 'orderUrl', 'deadline']) f[k].value = editing[k] ?? '';
+  for (const k of ['name', 'platform', 'orderNo', 'orderDate', 'shipDate', 'qty', 'currency', 'price', 'shipping', 'status', 'delivery', 'notes', 'link', 'orderUrl', 'deadline', 'remindAt']) f[k].value = editing[k] ?? '';
   renderThumbs();
   $('#dlg').showModal();
 }
@@ -223,7 +225,7 @@ $('#form').addEventListener('submit', (e) => {
     name: f.name.value.trim(), platform: f.platform.value.trim(), orderNo: f.orderNo.value.trim(), orderDate: f.orderDate.value.trim(),
     shipDate: f.shipDate.value.trim(), qty: Math.max(1, +f.qty.value || 1), currency: f.currency.value, price: +f.price.value || 0,
     shipping: +f.shipping.value || 0, status: f.status.value, delivery: f.delivery.value.trim(), notes: f.notes.value,
-    link: f.link.value.trim(), orderUrl: f.orderUrl.value.trim(), deadline: f.deadline.value,
+    link: f.link.value.trim(), orderUrl: f.orderUrl.value.trim(), deadline: f.deadline.value, remindAt: f.remindAt.value.slice(0, 16),
   });
   const draft = editing;
   busy = true;
@@ -281,6 +283,21 @@ $('#list').onclick = (e) => {
   if (row) openEditor(items.find((x) => x.id === row.dataset.id));
 };
 $('#btnAdd').onclick = () => openEditor();
+$('#btnTg').onclick = async () => {
+  try {
+    const st = await api('GET', '/api/telegram');
+    if (!st.configured) {
+      alert('Telegram 通知未設定。\n\n1. 喺 Telegram 搵 @BotFather，傳 /newbot，跟指示改名，會收到一串 bot token。\n2. 喺 Railway 嘅 web 服務加變數 TELEGRAM_BOT_TOKEN = 嗰串 token。\n3. 部署好之後，喺 Telegram 打開你個 bot 撳「開始」，再返嚟撳呢個 🔔 測試。');
+      return;
+    }
+    await api('POST', '/api/telegram/test');
+    alert('已經傳咗一條測試訊息去你嘅 Telegram 🎉');
+  } catch (err) {
+    let msg = err.message || String(err);
+    try { msg = JSON.parse(msg.replace(/^\d+ /, '')).error || msg; } catch { /* plain text */ }
+    alert('Telegram：' + msg);
+  }
+};
 
 // ---------- tabs ----------
 function setTab(t) {
