@@ -156,8 +156,10 @@ window.SEED_ITEMS = [
   "shipDate": "發貨準備中",
   "delivery": "日本配送 (〒278-0003)",
   "status": "已確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4570189212267",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4570189212267_1.jpg"
+  ]
  },
  {
   "id": "seed-11",
@@ -172,8 +174,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414452",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414452_1_778d9897-3982-43da-8d72-e6ff75df7c44.jpg"
+  ]
  },
  {
   "id": "seed-12",
@@ -188,8 +192,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414469",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414469_1_243241d8-3a74-4729-ae09-776cb2ab16d3.jpg"
+  ]
  },
  {
   "id": "seed-13",
@@ -204,8 +210,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414476",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414476_1_c075c8b0-fd35-4cc7-934c-736ae1d68830.jpg"
+  ]
  },
  {
   "id": "seed-14",
@@ -220,8 +228,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414490",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414490_1_9a124f47-61d3-4fe2-bea3-fc441c3f0f63.jpg"
+  ]
  },
  {
   "id": "seed-15",
@@ -236,8 +246,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414506",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414506_1_94ed7953-45d8-4f39-b5c0-34b45a106a7e.jpg"
+  ]
  },
  {
   "id": "seed-16",
@@ -252,8 +264,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414537",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414537_1_2635ba87-c441-43c7-ad88-ed0c28b27a20.jpg"
+  ]
  },
  {
   "id": "seed-17",
@@ -268,8 +282,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414544",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414544_1_406ef404-3582-4008-92bd-88ff7d19df16.jpg"
+  ]
  },
  {
   "id": "seed-18",
@@ -284,8 +300,10 @@ window.SEED_ITEMS = [
   "shipDate": "",
   "delivery": "日本國內配送 (陳 敏熙)",
   "status": "已取消",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414568",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414568_1_aa4806ae-dd77-459a-81c5-a13b6ee32ed5.jpg"
+  ]
  },
  {
   "id": "seed-19",
@@ -300,8 +318,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414506",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414506_1_94ed7953-45d8-4f39-b5c0-34b45a106a7e.jpg"
+  ]
  },
  {
   "id": "seed-20",
@@ -316,8 +336,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4571609414452",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4571609414452_1_778d9897-3982-43da-8d72-e6ff75df7c44.jpg"
+  ]
  },
  {
   "id": "seed-21",
@@ -333,7 +355,9 @@ window.SEED_ITEMS = [
   "delivery": "日本國內配送",
   "status": "待確認",
   "notes": "",
-  "photos": []
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0945/8047/4143/files/b43270ef1a84c2ac6cf92021955a2d8d.webp"
+  ]
  },
  {
   "id": "seed-22",
@@ -349,7 +373,9 @@ window.SEED_ITEMS = [
   "delivery": "日本國內配送",
   "status": "待確認",
   "notes": "",
-  "photos": []
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0945/8047/4143/files/6f8ca5d32c84c2ac6cf90f3ee57f2a0f.webp"
+  ]
  },
  {
   "id": "seed-23",
@@ -365,7 +391,9 @@ window.SEED_ITEMS = [
   "delivery": "日本國內配送",
   "status": "待確認",
   "notes": "",
-  "photos": []
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0945/8047/4143/files/7791d36cd784c2ac6cf91101ca719e0e.webp"
+  ]
  },
  {
   "id": "seed-24",
@@ -380,8 +408,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054209",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054209_1.jpg"
+  ]
  },
  {
   "id": "seed-25",
@@ -396,8 +426,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054193",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054193_3.jpg"
+  ]
  },
  {
   "id": "seed-26",
@@ -412,8 +444,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054186",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054186_3.jpg"
+  ]
  },
  {
   "id": "seed-27",
@@ -428,8 +462,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054179",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054179_2.jpg"
+  ]
  },
  {
   "id": "seed-28",
@@ -444,8 +480,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054162",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054162_2.jpg"
+  ]
  },
  {
   "id": "seed-29",
@@ -460,8 +498,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054155",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054155_2.jpg"
+  ]
  },
  {
   "id": "seed-30",
@@ -476,8 +516,10 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054148",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054148_2.jpg"
+  ]
  },
  {
   "id": "seed-31",
@@ -492,7 +534,9 @@ window.SEED_ITEMS = [
   "shipDate": "訂單確認中",
   "delivery": "日本國內配送",
   "status": "待確認",
-  "notes": "",
-  "photos": []
+  "notes": "商品頁：https://chiikawamarket.jp/products/4901770054131",
+  "photos": [
+   "https://cdn.shopify.com/s/files/1/0626/7142/1681/files/4901770054131_2.jpg"
+  ]
  }
 ];

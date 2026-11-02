@@ -216,8 +216,17 @@ $('#fileImport').onchange = async (e) => {
 (async () => {
   $('#fStatus').innerHTML += STATUSES.map((s) => `<option>${s}</option>`).join('');
   await DB.open();
-  items = (await DB.get()) || JSON.parse(JSON.stringify(window.SEED_ITEMS));
-  if (!(await DB.get())) save();
+  const stored = await DB.get();
+  items = stored || JSON.parse(JSON.stringify(window.SEED_ITEMS));
+  // fill in photos/notes added to the seed data later, without overwriting the user's own
+  const seedById = new Map(window.SEED_ITEMS.map((s) => [s.id, s]));
+  for (const it of items) {
+    const s = seedById.get(it.id);
+    if (!s) continue;
+    if (!it.photos?.length && s.photos.length) it.photos = [...s.photos];
+    if (!it.notes && s.notes) it.notes = s.notes;
+  }
+  save();
   render();
 })();
 })();
