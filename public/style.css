@@ -106,3 +106,8 @@ td .recv{margin-top:4px}
 .pic .nav{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;padding:0;border-radius:50%;border:0;background:rgba(0,0,0,.4);color:#fff;font-size:22px;line-height:1;display:none}
 .pic .prev{left:8px}.pic .next{right:8px}
 @media (hover:hover){.card:hover .pic .nav{display:block}}
+/* show whole photo inside the square frame (wide banners were being cropped) */
+.pic{overflow:hidden;background:#fff}
+@media (prefers-color-scheme:dark){.pic{background:#2f262a}}
+.pic img,.pic .slides img{width:100%;height:100%;min-width:0;object-fit:contain;display:block}
+.pic .slides{position:absolute;inset:0}
