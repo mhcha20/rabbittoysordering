@@ -530,7 +530,7 @@ $('#cartForm').addEventListener('submit', async (e) => {
   $('#cartGo').disabled = true;
   try {
     const r = await api('POST', '/api/cart', { lines });
-    const notYet = r.items.some((it) => it.ok && !it.available);
+    const notYet = r.items.some((it) => it.ok && it.available === false);
     out.innerHTML =
       r.carts.map((c) => `<a class="cartOpen" href="${esc(c.url)}" target="_blank" rel="noopener">🛒 打開付款頁（${c.count} 件）<small>${esc(c.shop)}</small></a>
         <button type="button" class="small cartCopy" data-copy="${esc(c.url)}">複製連結</button>`).join('') +
@@ -538,7 +538,7 @@ $('#cartForm').addEventListener('submit', async (e) => {
       '<ul class="cartList">' + r.items.map((it) => it.ok
         ? `<li>${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : '<span class="noimg">🐰</span>'}
             <span class="cartName">${esc(it.title)}${it.variantTitle ? `<small>款式：${esc(it.variantTitle)}${it.manyVariants ? '（有幾款，請喺付款頁核對）' : ''}</small>` : ''}</span>
-            <span class="cartMeta">× ${it.qty}${it.available ? '' : '<em>未開賣</em>'}</span></li>`
+            <span class="cartMeta">× ${it.qty}${it.available === false ? '<em>未開賣</em>' : ''}</span></li>`
         : `<li class="bad"><span class="noimg">❌</span><span class="cartName">${esc(it.error)}<small>${esc(it.url || '')}</small></span></li>`).join('') + '</ul>';
   } catch (err) { out.innerHTML = `<p class="cartNote bad">❌ ${esc(err.message || err)}</p>`; }
   $('#cartGo').disabled = false;
