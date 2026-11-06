@@ -118,10 +118,11 @@
     <div id="cartResult" class="cartResult" hidden></div>
     <div class="cartPickHead" id="cartPickHead"><b>想預訂嘅商品</b><button type="button" id="cartAll" class="small">全選</button></div>
     <div id="cartPick" class="cartPick"></div>
-    <details class="cartExtra" id="cartExtra">
-      <summary>＋ 貼其他商品連結</summary>
-      <textarea name="extra" rows="4" placeholder="一行一條連結；要買多過一件就喺尾加「 x2」"></textarea>
-    </details>
+    <div class="cartAdd">
+      <input id="cartUrl" type="url" inputmode="url" placeholder="貼商品連結" autocomplete="off">
+      <button type="button" id="cartAddBtn" class="primary">＋ 加入</button>
+    </div>
+    <p class="cartAddHint">加入嘅商品會順手存入「想預訂」，下次都喺度。</p>
     <div class="formBtns"><button type="button" id="cartClose">關閉</button><span class="grow"></span><button type="submit" class="primary" value="ok" id="cartGo">砌購物車連結</button></div>
   </form>
 </dialog>

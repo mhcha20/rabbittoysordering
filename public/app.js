@@ -436,8 +436,7 @@ $('#linkForm').addEventListener('submit', async (e) => {
 const isProductUrl = (u) => /^https:\/\/[^/]+\/.*products\/[^/?#]+/.test(u || '');
 const cartChecked = () => [...document.querySelectorAll('#cartPick [data-cart]:checked')];
 function cartCount() {
-  const n = cartChecked().reduce((a, c) => a + (parseInt(c.closest('.cartRow').querySelector('.qty b').textContent, 10) || 1), 0)
-    + $('#cartForm').extra.value.split('\n').filter((l) => l.trim()).length;
+  const n = cartChecked().reduce((a, c) => a + (parseInt(c.closest('.cartRow').querySelector('.qty b').textContent, 10) || 1), 0);
   $('#cartGo').textContent = n ? `砌連結（${n} 件）` : '砌購物車連結';
   const boxes = document.querySelectorAll('#cartPick [data-cart]');
   $('#cartAll').textContent = boxes.length && cartChecked().length === boxes.length ? '全部唔揀' : '全選';
@@ -445,22 +444,62 @@ function cartCount() {
 $('#btnCart').onclick = () => {
   const wishes = items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄' && isProductUrl(i.orderUrl));
   $('#cartPickHead').hidden = !wishes.length;
-  $('#cartPick').innerHTML = wishes.length ? wishes.map((i) => `
-    <div class="cartRow">
-      <label class="cartTap"><input type="checkbox" data-cart="${esc(i.id)}">
-        ${i.photos[0] ? `<img src="${esc(i.photos[0])}" alt="" loading="lazy">` : '<span class="noimg">🐰</span>'}
-        <span class="cartName">${esc(i.name)}${i.deadline ? `<small>${esc(i.deadline.replace('T', ' '))} 截止</small>` : ''}</span>
-      </label>
-      <span class="qty"><button type="button" data-step="-1" aria-label="減少">−</button><b>${i.qty || 1}</b><button type="button" data-step="1" aria-label="增加">＋</button></span>
-    </div>`).join('')
-    : '<p class="meta">想預訂入面未有 ちいかわマーケット 呢類商品連結。可以喺下面「＋ 貼其他商品連結」貼。</p>';
-  $('#cartForm').extra.value = '';
-  $('#cartExtra').open = !wishes.length;
+  $('#cartPick').innerHTML = wishes.length ? wishes.map((i) => cartRowHtml(i)).join('')
+    : '<p class="meta" id="cartNone">想預訂入面未有 ちいかわマーケット 呢類商品連結。喺下面貼連結撳「＋ 加入」就得。</p>';
+  $('#cartUrl').value = '';
   $('#cartResult').hidden = true; $('#cartResult').innerHTML = '';
   cartCount();
   $('#cartDlg').showModal();
   $('#cartForm').scrollTop = 0;
 };
+const cartRowHtml = (i, checked = false) => `
+    <div class="cartRow">
+      <label class="cartTap"><input type="checkbox" data-cart="${esc(i.id)}"${checked ? ' checked' : ''}>
+        ${i.photos[0] ? `<img src="${esc(i.photos[0])}" alt="" loading="lazy">` : '<span class="noimg">🐰</span>'}
+        <span class="cartName">${esc(i.name)}${i.deadline ? `<small>${esc(i.deadline.replace('T', ' '))} 截止</small>` : ''}</span>
+      </label>
+      <span class="qty"><button type="button" data-step="-1" aria-label="減少">−</button><b>${i.qty || 1}</b><button type="button" data-step="1" aria-label="增加">＋</button></span>
+    </div>`;
+async function cartAdd() {
+  const url = $('#cartUrl').value.trim();
+  if (!url) { $('#cartUrl').focus(); return; }
+  const dup = items.find((x) => kindOf(x) === 'wish' && x.status !== '已放棄' && x.orderUrl === url);
+  const btn = $('#cartAddBtn');
+  btn.disabled = true; btn.textContent = '搵緊…';
+  try {
+    let it = dup;
+    if (!it) {
+      const r = await api('POST', '/api/cart', { lines: [{ url, qty: 1 }] });
+      const f = r.items[0];
+      if (!f?.ok) throw new Error(f?.error || '搵唔到商品');
+      const host = new URL(url).hostname;
+      const draft = { ...blankItem('wish'), name: f.title + (f.variantTitle ? `（${f.variantTitle}）` : ''),
+        platform: host.endsWith('chiikawamarket.jp') ? 'ちいかわマーケット' : host, orderUrl: url,
+        price: f.price || 0, photos: f.image ? [f.image] : [] };
+      it = (await api('PUT', '/api/items/' + encodeURIComponent(draft.id), draft)).item;
+      items.push(it);
+      render();
+    }
+    const box = document.querySelector(`#cartPick [data-cart="${CSS.escape(it.id)}"]`);
+    if (box) box.checked = true;
+    else {
+      $('#cartNone')?.remove();
+      $('#cartPickHead').hidden = false;
+      $('#cartPick').insertAdjacentHTML('beforeend', cartRowHtml(it, true));
+    }
+    $('#cartUrl').value = '';
+    cartCount();
+    const row = (box || $('#cartPick').lastElementChild).closest('.cartRow');
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 1200);
+  } catch (err) {
+    let msg = err.message || String(err);
+    try { msg = JSON.parse(msg.replace(/^\d+ /, '')).error || msg; } catch { /* plain */ }
+    alert('加唔到：' + msg);
+  } finally { btn.disabled = false; btn.textContent = '＋ 加入'; }
+}
+$('#cartAddBtn').onclick = cartAdd;
+$('#cartUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); cartAdd(); } });
 $('#cartClose').onclick = $('#cartX').onclick = () => $('#cartDlg').close();
 $('#cartAll').onclick = () => {
   const boxes = [...document.querySelectorAll('#cartPick [data-cart]')];
@@ -477,18 +516,13 @@ $('#cartPick').addEventListener('click', (e) => {
   cartCount();
 });
 $('#cartPick').addEventListener('change', cartCount);
-$('#cartForm').extra.addEventListener('input', cartCount);
 $('#cartForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const lines = cartChecked().map((c) => ({
     url: items.find((x) => x.id === c.dataset.cart)?.orderUrl,
     qty: c.closest('.cartRow').querySelector('.qty b').textContent,
   })).filter((l) => l.url);
-  for (const row of $('#cartForm').extra.value.split('\n')) {
-    const m = row.trim().match(/^(\S+)(?:\s*[x×*]\s*(\d+))?$/i);
-    if (m) lines.push({ url: m[1], qty: m[2] || 1 });
-  }
-  if (!lines.length) { alert('請剔選商品或者貼最少一條連結'); return; }
+  if (!lines.length) { alert('請剔選最少一件商品'); return; }
   const out = $('#cartResult');
   out.hidden = false;
   out.innerHTML = '<p class="cartWait"><span class="spinner small"></span>搵緊商品資料…</p>';
