@@ -98,7 +98,7 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
     req.on('data', (c) => { size += c.length; if (size > MAX_BODY) { reject(new Error('too large')); req.destroy(); } else chunks.push(c); });
-    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')); } catch (e) { reject(e); } });
+    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')); } catch (e) { e.status = 400; e.clientBody = true; reject(e); } });
     req.on('error', reject);
   });
 }
@@ -160,6 +160,10 @@ const server = http.createServer(async (req, res) => {
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {
+    if (e instanceof SyntaxError && !e.clientBody) {
+      console.error('bad JSON:', e.message);
+      return send(res, 502, { error: 'AI 回覆格式有誤，請再試一次。' });
+    }
     if (e.status && e.status >= 500) console.error(e);
     const code = e.message === 'too large' ? 413 : (Number.isInteger(e.status) && e.status >= 400 && e.status < 600 ? e.status : 400);
     send(res, code, { error: String(e.message || e) });

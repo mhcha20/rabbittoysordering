@@ -195,24 +195,70 @@ function xaiInput(content) {
   return parts;
 }
 
-function extractOutputText(data) {
-  if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text.trim();
+function messageTexts(data) {
   const chunks = [];
   for (const item of data?.output || []) {
+    if (item.type && item.type !== 'message') continue;
     for (const c of item.content || []) {
-      if ((c.type === 'output_text' || c.type === 'text') && c.text) chunks.push(c.text);
+      if ((c.type === 'output_text' || c.type === 'text') && typeof c.text === 'string' && c.text.trim()) chunks.push(c.text);
     }
+  }
+  if (!chunks.length && typeof data?.output_text === 'string') chunks.push(data.output_text);
+  return chunks;
+}
+
+function extractOutputText(data) {
+  const chunks = messageTexts(data);
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    const t = chunks[i].trim();
+    if (t.includes('"items"') || t.startsWith('{') || t.startsWith('```')) return t;
   }
   return chunks.join('\n').trim();
 }
 
+// First-to-last brace slice breaks when the model (or citations) adds text after a finished JSON object.
+function balancedObjects(raw) {
+  const out = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '{') { if (depth === 0) start = i; depth++; }
+    else if (c === '}' && depth) {
+      depth--;
+      if (depth === 0 && start >= 0) out.push(raw.slice(start, i + 1));
+    }
+  }
+  return out;
+}
+
 function parseJsonLoose(text) {
   const raw = String(text || '').trim();
-  try { return JSON.parse(raw); } catch { /* fenced or extra prose */ }
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(raw);
-  if (fenced) { try { return JSON.parse(fenced[1]); } catch { /* fall through */ } }
-  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
-  if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
+  const tryParse = (s) => {
+    try {
+      const v = JSON.parse(s);
+      if (v && Array.isArray(v.items)) return v;
+    } catch { /* next candidate */ }
+    return null;
+  };
+  let hit = tryParse(raw);
+  if (hit) return hit;
+  for (const block of raw.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)) {
+    hit = tryParse(block[1]);
+    if (hit) return hit;
+  }
+  const objs = balancedObjects(raw);
+  for (let i = objs.length - 1; i >= 0; i--) {
+    hit = tryParse(objs[i]);
+    if (hit) return hit;
+  }
+  console.error('xAI reply was not usable JSON, length', raw.length);
   throw fail(502, 'xAI 回覆格式有誤，請再試一次。');
 }
 
