@@ -43,17 +43,54 @@ const telegram = createTelegram({
 telegram.start();
 
 // Turn embedded data: URLs into stored files so items.json stays small.
+function imageExt(buf) {
+  if (buf.length > 3 && buf[0] === 0xFF && buf[1] === 0xD8) return 'jpg';
+  if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'png';
+  if (buf.length > 6 && buf.slice(0, 4).toString() === 'GIF8') return 'gif';
+  if (buf.length > 12 && buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WEBP') return 'webp';
+  return '';
+}
 function storePhotos(item) {
   item.photos = (Array.isArray(item.photos) ? item.photos : []).map((p) => {
     const m = /^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/s.exec(p || '');
     if (!m) return p;
-    const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+    const buf = Buffer.from(m[2], 'base64');
+    const ext = imageExt(buf);
+    if (!ext) return '';
     const name = crypto.randomUUID() + '.' + ext;
-    fs.writeFileSync(path.join(PHOTO_DIR, name), Buffer.from(m[2], 'base64'));
+    fs.writeFileSync(path.join(PHOTO_DIR, name), buf);
     return '/photos/' + name;
-  });
+  }).filter(Boolean);
   return item;
 }
+
+// Shops often block the phone from loading their images. Keep a copy we serve ourselves.
+async function rehostRemote(url) {
+  try {
+    const r = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(12000), headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'image/*,*/*;q=0.8' } });
+    const buf = Buffer.from(await r.arrayBuffer());
+    const ext = r.ok ? imageExt(buf) : '';
+    if (!ext || buf.length > 8_000_000) return null;
+    const name = crypto.randomUUID() + '.' + ext;
+    fs.writeFileSync(path.join(PHOTO_DIR, name), buf);
+    return '/photos/' + name;
+  } catch { return null; }
+}
+async function rehostExisting() {
+  let changed = false;
+  for (const it of items) {
+    const photos = [];
+    for (const p of it.photos || []) {
+      if (!/^https:\/\//.test(p)) { photos.push(p); continue; }
+      const local = await rehostRemote(p);
+      photos.push(local || p);
+      if (local) changed = true;
+    }
+    if (photos.some((p, i) => p !== it.photos[i])) { it.photos = photos; changed = true; }
+  }
+  if (changed) persist();
+}
+rehostExisting().catch((e) => console.error('rehost photos', e.message));
 
 // Status "已收貨" carries the date it was received and the status to go back to if it is un-ticked.
 function hkToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
