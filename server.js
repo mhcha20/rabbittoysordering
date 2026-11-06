@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { parseOrder, parseWish, answerQuestion, findOfficialPhotos } = require('./ai');
 const { createTelegram } = require('./telegram');
+const { buildCart } = require('./cart');
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -249,6 +250,7 @@ const server = http.createServer(async (req, res) => {
       const images = Array.isArray(body?.images) ? body.images.slice(0, 4) : [];
       return send(res, 200, await parseWish({ link: String(body?.link || '').trim().slice(0, 2000), images, hint: String(body?.hint || '').slice(0, 500) }));
     }
+    if (p === '/api/cart' && req.method === 'POST') return send(res, 200, await buildCart(((await readBody(req)) || {}).lines));
     if (p === '/api/telegram' && req.method === 'GET') return send(res, 200, telegram.status());
     if (p === '/api/telegram/test' && req.method === 'POST') return send(res, 200, await telegram.test());
     if (p.startsWith('/photos/') && req.method === 'GET') {

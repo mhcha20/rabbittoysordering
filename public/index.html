@@ -12,6 +12,7 @@
   <div class="actions">
     <label class="btn primary" id="aiFileBtn">📷 截圖自動新增<input type="file" id="aiFile" accept="image/*" multiple hidden></label>
     <button id="btnLink" class="primary" hidden>🔗 貼連結新增</button>
+    <button id="btnCart" hidden>🛒 一次過買</button>
     <button id="btnAdd">＋ 手動新增</button>
     <button id="btnTg" title="Telegram 通知">🔔 通知</button>
     <button id="btnExport">匯出備份</button>
@@ -107,6 +108,17 @@
     <label class="wide">補充（可選）<input name="hint" placeholder="例如：想要藍色款"></label>
     <p class="meta wide">AI 會打開連結、上網搵官方資料同相，大約 1–3 分鐘。</p>
     <div class="formBtns"><span class="grow"></span><button type="button" id="linkCancel">取消</button><button type="submit" class="primary" value="ok">開始搵資料</button></div>
+  </form>
+</dialog>
+
+<dialog id="cartDlg">
+  <form id="cartForm" method="dialog" class="linkForm">
+    <h2>🛒 一次過買（Shopify 商店，例如 ちいかわマーケット）</h2>
+    <p class="meta wide">剔選想買嘅商品或者貼連結，撳「砌購物車連結」。之後一撳「打開」就會直接去付款頁，入面已經有齊所有商品。建議開賣前先砌好連結，到鐘即刻撳。</p>
+    <div id="cartPick" class="wide cartPick"></div>
+    <label class="wide">其他商品連結（一行一條；要多過一件就喺尾加「 x2」）<textarea name="extra" rows="4" placeholder="https://chiikawamarket.jp/products/4571609412281&#10;https://chiikawamarket.jp/products/4571609414117 x2"></textarea></label>
+    <div id="cartResult" class="wide"></div>
+    <div class="formBtns"><span class="grow"></span><button type="button" id="cartClose">關閉</button><button type="submit" class="primary" value="ok" id="cartGo">砌購物車連結</button></div>
   </form>
 </dialog>
 

@@ -152,3 +152,12 @@ input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100
 }
 .meta.remind{color:var(--pink-d);font-weight:600}
 .dt{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+.cartPick { display: grid; gap: 6px; max-height: 40vh; overflow: auto; }
+.cartRow { display: flex; align-items: center; gap: 8px; padding: 6px; border: 1px solid #ddd; border-radius: 8px; font-weight: normal; }
+.cartRow span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cartRow input[type=number] { width: 4.5em; }
+.cartLine { margin: 4px 0; overflow-wrap: anywhere; }
+.cartLine .warn { color: #c0392b; font-weight: normal; }
+.cartGo { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.cartGo a { text-decoration: none; }

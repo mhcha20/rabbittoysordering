@@ -360,6 +360,7 @@ function setTab(t) {
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
   $('#aiFileBtn').hidden = t === 'wish';
   $('#btnLink').hidden = t !== 'wish';
+  $('#btnCart').hidden = t !== 'wish';
   $('#fPickup').hidden = t === 'wish';
   $('#fStatus').innerHTML = '<option value="">全部狀態</option>' +
     (t === 'order' ? '<option value="__pending">未收貨（全部）</option>' : '') + statusesFor(t).map((s) => `<option>${s}</option>`).join('');
@@ -431,6 +432,50 @@ $('#linkForm').addEventListener('submit', async (e) => {
     startDrafts(result, images);
   } catch (err) { aiError(err); }
 });
+// ---------- buy all at once (Shopify cart link) ----------
+const isProductUrl = (u) => /^https:\/\/[^/]+\/.*products\/[^/?#]+/.test(u || '');
+$('#btnCart').onclick = () => {
+  const wishes = items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄' && isProductUrl(i.orderUrl));
+  $('#cartPick').innerHTML = wishes.length
+    ? '<p class="shotLabel">想預訂入面有購買網址嘅商品</p>' + wishes.map((i) => `<label class="cartRow"><input type="checkbox" data-cart="${esc(i.id)}"> <span>${esc(i.name)}<br><span class="meta">${esc(i.platform)}</span></span><input type="number" min="1" max="99" value="${i.qty || 1}" data-cartqty="${esc(i.id)}" aria-label="數量"></label>`).join('')
+    : '';
+  $('#cartForm').extra.value = '';
+  $('#cartResult').innerHTML = '';
+  $('#cartDlg').showModal();
+};
+$('#cartClose').onclick = () => $('#cartDlg').close();
+$('#cartForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const lines = [];
+  document.querySelectorAll('[data-cart]:checked').forEach((c) => {
+    const it = items.find((x) => x.id === c.dataset.cart);
+    const q = document.querySelector(`[data-cartqty="${CSS.escape(c.dataset.cart)}"]`).value;
+    if (it) lines.push({ url: it.orderUrl, qty: q });
+  });
+  for (const row of $('#cartForm').extra.value.split('\n')) {
+    const m = row.trim().match(/^(\S+)(?:\s*[x×*]\s*(\d+))?$/i);
+    if (m) lines.push({ url: m[1], qty: m[2] || 1 });
+  }
+  if (!lines.length) { alert('請剔選商品或者貼最少一條連結'); return; }
+  const out = $('#cartResult');
+  out.innerHTML = '<p class="meta">搵緊商品資料…</p>';
+  $('#cartGo').disabled = true;
+  try {
+    const r = await api('POST', '/api/cart', { lines });
+    out.innerHTML = r.items.map((it) => it.ok
+      ? `<p class="cartLine">✅ ${esc(it.title)}${it.variantTitle ? `（${esc(it.variantTitle)}）` : ''} × ${it.qty}${it.available ? '' : ' <b class="warn">（而家顯示未有貨／未開賣）</b>'}${it.manyVariants ? ' <b class="warn">有幾款，揀咗第一款有貨嘅，請喺付款頁檢查</b>' : ''}</p>`
+      : `<p class="cartLine">❌ ${esc(it.url)}<br><span class="meta">${esc(it.error)}</span></p>`).join('') +
+      r.carts.map((c) => `<div class="cartGo"><a class="btn primary" href="${esc(c.url)}" target="_blank" rel="noopener">🛒 打開 ${esc(c.shop)}（${c.count} 件）</a>
+        <button type="button" data-copy="${esc(c.url)}">複製連結</button></div>`).join('');
+  } catch (err) { out.innerHTML = `<p class="cartLine">❌ ${esc(err.message || err)}</p>`; }
+  $('#cartGo').disabled = false;
+});
+$('#cartResult').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = '已複製 ✓'; } catch { prompt('複製呢條連結：', b.dataset.copy); }
+});
+
 for (const id of ['#q', '#fPlatform', '#fPickup', '#fStatus', '#fCur', '#sort', '#showCancelled']) $(id).addEventListener('input', render);
 document.querySelectorAll('.view button').forEach((b) => b.onclick = () => {
   view = b.dataset.view;
