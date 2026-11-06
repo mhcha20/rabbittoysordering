@@ -2,6 +2,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
 const MODEL = 'claude-opus-5-5';
+const XAI_MODEL = process.env.XAI_MODEL || 'grok-4.7';
 const STATUSES = ['待確認', '已下單', '已確認', '已發貨', '已收貨', '已取消'];
 const CURRENCIES = ['HKD', 'JPY', 'CNY', 'TWD', 'USD'];
 
@@ -170,6 +171,116 @@ async function runClaude({ system, schema, content }) {
   return result;
 }
 
+function creditExhausted(err) {
+  const msg = `${err?.status || ''} ${err?.message || ''} ${err?.error?.message || ''}`;
+  return /credit balance is too low/i.test(msg)
+    || /purchase credits/i.test(msg)
+    || /insufficient(?:\s+\w+){0,3}\s+credits?/i.test(msg);
+}
+
+// xAI image input is jpeg/png only. Screenshots are already jpeg; skip anything else.
+function xaiInput(content) {
+  const parts = [];
+  let text = '';
+  let skipped = 0;
+  for (const block of content || []) {
+    if (block.type === 'text') { text += (text ? '\n' : '') + block.text; continue; }
+    if (block.type !== 'image' || !block.source?.data) continue;
+    const mt = block.source.media_type === 'image/jpg' ? 'image/jpeg' : block.source.media_type;
+    if (mt !== 'image/jpeg' && mt !== 'image/png') { skipped += 1; continue; }
+    parts.push({ type: 'input_image', image_url: `data:${mt};base64,${block.source.data}`, detail: 'high' });
+  }
+  if (skipped) text += `\n（有 ${skipped} 張圖格式 xAI 唔支援，只得 jpeg/png，已略過。）`;
+  parts.push({ type: 'input_text', text: text || '請根據指示回覆。' });
+  return parts;
+}
+
+function extractOutputText(data) {
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text.trim();
+  const chunks = [];
+  for (const item of data?.output || []) {
+    for (const c of item.content || []) {
+      if ((c.type === 'output_text' || c.type === 'text') && c.text) chunks.push(c.text);
+    }
+  }
+  return chunks.join('\n').trim();
+}
+
+function parseJsonLoose(text) {
+  const raw = String(text || '').trim();
+  try { return JSON.parse(raw); } catch { /* fenced or extra prose */ }
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(raw);
+  if (fenced) { try { return JSON.parse(fenced[1]); } catch { /* fall through */ } }
+  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
+  if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
+  throw fail(502, 'xAI 回覆格式有誤，請再試一次。');
+}
+
+async function callXai({ instructions, input, schema, effort, maxOutput, search }) {
+  const key = process.env.XAI_API_KEY;
+  if (!key) {
+    throw fail(503, process.env.ANTHROPIC_API_KEY
+      ? 'Anthropic 餘額已經用晒。請確認 Railway 有 XAI_API_KEY，先可以用 xAI 做後備。'
+      : '未設定 ANTHROPIC_API_KEY 或 XAI_API_KEY。');
+  }
+  const body = {
+    model: XAI_MODEL,
+    instructions,
+    input,
+    store: false,
+    reasoning: { effort },
+    max_output_tokens: maxOutput,
+  };
+  if (search) body.tools = [{ type: 'web_search', enable_image_search: true, enable_image_understanding: true }];
+  if (schema) {
+    body.text = { format: { type: 'json_schema', name: 'parse_result', schema: resultSchema(schema), strict: true } };
+  }
+  const r = await fetch('https://api.x.ai/v1/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(180000),
+  });
+  const raw = await r.text();
+  if (!r.ok) {
+    let detail = raw.slice(0, 300);
+    try { detail = JSON.parse(raw).error?.message || JSON.parse(raw).error || detail; } catch { /* keep slice */ }
+    throw Object.assign(fail(502, `xAI 後備失敗（${r.status}）：${detail}`), { upstream: r.status });
+  }
+  try { return JSON.parse(raw); } catch { throw fail(502, 'xAI 回覆唔係 JSON。'); }
+}
+
+async function runGrok({ system, schema, content }) {
+  const instructions = system + '\n\nYou are the backup model because Anthropic credits are exhausted. Use web search and open the official product page. Only put image URLs you actually saw (page images, og:image, or image-search results) into photoUrls. Never invent a URL.';
+  const input = [{ role: 'user', content: xaiInput(content) }];
+  let data;
+  try {
+    data = await callXai({ instructions, input, schema, effort: 'medium', maxOutput: 8000, search: true });
+  } catch (err) {
+    if (err.upstream !== 400) throw err;
+    console.error('xAI rejected structured output, retrying as plain JSON');
+    data = await callXai({
+      instructions: instructions + '\nReturn one JSON object only, no markdown, matching this schema:\n' + JSON.stringify(resultSchema(schema)),
+      input, schema: null, effort: 'medium', maxOutput: 8000, search: true,
+    });
+  }
+  const result = parseJsonLoose(extractOutputText(data));
+  if (!Array.isArray(result.items)) throw fail(502, 'xAI 回覆缺少商品資料。');
+  result.summary = '（Anthropic 餘額用晒，已改用 xAI）' + (result.summary || '');
+  return result;
+}
+
+async function runAI(opts) {
+  if (process.env.ANTHROPIC_API_KEY) {
+    try { return await runClaude(opts); }
+    catch (err) {
+      if (!creditExhausted(err)) throw err;
+      console.error('Anthropic credits exhausted, falling back to xAI');
+    }
+  }
+  return runGrok(opts);
+}
+
 async function checkPhotos(result) {
   // Keep only photo URLs that really are reachable images.
   for (const item of result.items) {
@@ -185,7 +296,7 @@ async function parseOrder({ images, hint }) {
   const content = imageBlocks(images);
   if (!content.length) throw fail(400, '請上傳至少一張截圖');
   content.push({ type: 'text', text: `今日日期：${new Date().toISOString().slice(0, 10)}。${hint ? '用戶補充：' + hint : ''}\n請分析以上訂單截圖並找出每件商品的資料同官方圖片。` });
-  const result = await checkPhotos(await runClaude({ system: SYSTEM, schema: ITEM_SCHEMA, content }));
+  const result = await checkPhotos(await runAI({ system: SYSTEM, schema: ITEM_SCHEMA, content }));
   for (const item of result.items) item.kind = 'order';
   return result;
 }
@@ -204,7 +315,7 @@ async function parseWish({ link, images, hint }) {
     hint ? `用戶補充：${hint}` : '',
     '請搵出呢個帖文介紹嘅商品資料（官方名稱、價錢、預訂截止、發售日、喺邊度預訂）同官方圖片。',
   ].filter(Boolean).join('\n') });
-  const result = await checkPhotos(await runClaude({ system: WISH_SYSTEM, schema: WISH_SCHEMA, content }));
+  const result = await checkPhotos(await runAI({ system: WISH_SYSTEM, schema: WISH_SCHEMA, content }));
   for (const item of result.items) {
     Object.assign(item, { kind: 'wish', status: '想買', link: link || '', qty: 1, shipping: 0 });
     if (postImage) item.photos.push(postImage); // the post's own picture as a fallback / extra
@@ -213,25 +324,29 @@ async function parseWish({ link, images, hint }) {
 }
 
 // Answer a free-text question from Telegram using the user's own records.
-async function answerQuestion(question, items) {
-  const anthropic = getClient();
-  const records = items.map((it) => ({
+const QA_SYSTEM = `You answer questions on Telegram about a Hong Kong collector's toy orders and pre-order wishlist, using only the records given.
+Reply in Cantonese (Traditional Chinese, Hong Kong), short and friendly, plain text (no Markdown, no HTML), suitable for a phone chat.
+Times are Hong Kong time. Cancelled (已取消) and abandoned (已放棄) items only count if the question is about them. If the records don't answer the question, say so.`;
+
+function questionRecords(items) {
+  return items.map((it) => ({
     種類: it.kind === 'wish' ? '想預訂' : '訂單', 狀態: it.status, 商品: it.name, 店舖: it.platform, 訂單編號: it.orderNo || undefined,
     下單日期: it.orderDate || undefined, 數量: it.qty, 幣別: it.currency, 單價: it.price, 運費: it.shipping || undefined,
     預計發貨或發售: it.shipDate || undefined, 預訂截止: it.deadline || undefined, 提醒時間HKT: it.remindAt || undefined,
     取貨: it.delivery || undefined, 收貨日期: it.receivedAt || undefined, 預訂頁: it.orderUrl || undefined,
     備註: it.notes ? it.notes.slice(0, 300) : undefined,
   }));
-  const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+}
+
+async function answerWithClaude(question, records, now) {
+  const anthropic = getClient();
   const response = await anthropic.beta.messages.create({
     model: MODEL,
     max_tokens: 4000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     output_config: { effort: 'low' },
-    system: `You answer questions on Telegram about a Hong Kong collector's toy orders and pre-order wishlist, using only the records given.
-Reply in Cantonese (Traditional Chinese, Hong Kong), short and friendly, plain text (no Markdown, no HTML), suitable for a phone chat.
-Times are Hong Kong time. Cancelled (已取消) and abandoned (已放棄) items only count if the question is about them. If the records don't answer the question, say so.`,
+    system: QA_SYSTEM,
     messages: [{ role: 'user', content: [
       { type: 'text', text: `而家香港時間：${now}\n\n我嘅記錄（JSON）：\n${JSON.stringify(records)}` },
       { type: 'text', text: `問題：${question}` },
@@ -239,6 +354,30 @@ Times are Hong Kong time. Cancelled (已取消) and abandoned (已放棄) items 
   });
   if (response.stop_reason === 'refusal') throw fail(422, 'AI 未能回答呢條問題');
   return response.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim() || '（冇答案）';
+}
+
+async function answerWithGrok(question, records, now) {
+  const data = await callXai({
+    instructions: QA_SYSTEM,
+    input: `而家香港時間：${now}\n\n我嘅記錄（JSON）：\n${JSON.stringify(records)}\n\n問題：${question}`,
+    effort: 'low',
+    maxOutput: 1200,
+    search: false,
+  });
+  return extractOutputText(data).trim() || '（冇答案）';
+}
+
+async function answerQuestion(question, items) {
+  const records = questionRecords(items);
+  const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+  if (process.env.ANTHROPIC_API_KEY) {
+    try { return await answerWithClaude(question, records, now); }
+    catch (err) {
+      if (!creditExhausted(err)) throw err;
+      console.error('Anthropic credits exhausted, falling back to xAI');
+    }
+  }
+  return '（已改用 xAI）' + await answerWithGrok(question, records, now);
 }
 
 module.exports = { parseOrder, parseWish, answerQuestion };

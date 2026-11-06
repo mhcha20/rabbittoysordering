@@ -37,7 +37,7 @@ persist();
 const telegram = createTelegram({
   dataDir: DATA_DIR,
   getItems: () => items,
-  ask: process.env.ANTHROPIC_API_KEY ? answerQuestion : null,
+  ask: (process.env.ANTHROPIC_API_KEY || process.env.XAI_API_KEY) ? answerQuestion : null,
   publicUrl: process.env.PUBLIC_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/` : ''),
 });
 telegram.start();
