@@ -13,6 +13,8 @@ function parseLink(raw) {
   return { origin: u.origin, handle: decodeURIComponent(m[1]), variant: u.searchParams.get('variant') || '' };
 }
 
+const fixImg = (u) => (typeof u === 'string' && u.startsWith('//') ? 'https:' + u : typeof u === 'string' ? u : '');
+
 async function lookup({ url, qty }) {
   const p = parseLink(url);
   if (!p) return { url, ok: false, error: '唔係 Shopify 商品連結（網址要有 /products/）' };
@@ -22,7 +24,8 @@ async function lookup({ url, qty }) {
       headers: { 'User-Agent': UA, Accept: 'application/json' },
       signal: AbortSignal.timeout(15000),
     });
-    if (!r.ok) return { url, ok: false, error: `店舖回覆 ${r.status}（可能唔係 Shopify 或者商品已下架）` };
+    if (r.status === 404) return { url, ok: false, error: '店舖搵唔到呢件商品（可能未上架、已下架，或者連結有錯）' };
+    if (!r.ok) return { url, ok: false, error: `店舖回覆 ${r.status}（可能唔係 Shopify 商店）` };
     const prod = await r.json();
     const variants = prod.variants || [];
     if (!variants.length) return { url, ok: false, error: '搵唔到款式' };
@@ -30,6 +33,7 @@ async function lookup({ url, qty }) {
     return {
       url, ok: true, origin: p.origin, qty: n,
       title: prod.title, variantId: v.id,
+      image: fixImg((v.featured_image && v.featured_image.src) || prod.featured_image || (prod.images || [])[0] || ''),
       variantTitle: variants.length > 1 ? v.title : '',
       manyVariants: variants.length > 1 && !p.variant,
       available: !!v.available,

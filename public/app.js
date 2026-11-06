@@ -434,41 +434,81 @@ $('#linkForm').addEventListener('submit', async (e) => {
 });
 // ---------- buy all at once (Shopify cart link) ----------
 const isProductUrl = (u) => /^https:\/\/[^/]+\/.*products\/[^/?#]+/.test(u || '');
+const cartChecked = () => [...document.querySelectorAll('#cartPick [data-cart]:checked')];
+function cartCount() {
+  const n = cartChecked().reduce((a, c) => a + (parseInt(c.closest('.cartRow').querySelector('.qty b').textContent, 10) || 1), 0)
+    + $('#cartForm').extra.value.split('\n').filter((l) => l.trim()).length;
+  $('#cartGo').textContent = n ? `砌連結（${n} 件）` : '砌購物車連結';
+  const boxes = document.querySelectorAll('#cartPick [data-cart]');
+  $('#cartAll').textContent = boxes.length && cartChecked().length === boxes.length ? '全部唔揀' : '全選';
+}
 $('#btnCart').onclick = () => {
   const wishes = items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄' && isProductUrl(i.orderUrl));
-  $('#cartPick').innerHTML = wishes.length
-    ? '<p class="shotLabel">想預訂入面有購買網址嘅商品</p>' + wishes.map((i) => `<label class="cartRow"><input type="checkbox" data-cart="${esc(i.id)}"> <span>${esc(i.name)}<br><span class="meta">${esc(i.platform)}</span></span><input type="number" min="1" max="99" value="${i.qty || 1}" data-cartqty="${esc(i.id)}" aria-label="數量"></label>`).join('')
-    : '';
+  $('#cartPickHead').hidden = !wishes.length;
+  $('#cartPick').innerHTML = wishes.length ? wishes.map((i) => `
+    <div class="cartRow">
+      <label class="cartTap"><input type="checkbox" data-cart="${esc(i.id)}">
+        ${i.photos[0] ? `<img src="${esc(i.photos[0])}" alt="" loading="lazy">` : '<span class="noimg">🐰</span>'}
+        <span class="cartName">${esc(i.name)}${i.deadline ? `<small>${esc(i.deadline.replace('T', ' '))} 截止</small>` : ''}</span>
+      </label>
+      <span class="qty"><button type="button" data-step="-1" aria-label="減少">−</button><b>${i.qty || 1}</b><button type="button" data-step="1" aria-label="增加">＋</button></span>
+    </div>`).join('')
+    : '<p class="meta">想預訂入面未有 ちいかわマーケット 呢類商品連結。可以喺下面「＋ 貼其他商品連結」貼。</p>';
   $('#cartForm').extra.value = '';
-  $('#cartResult').innerHTML = '';
+  $('#cartExtra').open = !wishes.length;
+  $('#cartResult').hidden = true; $('#cartResult').innerHTML = '';
+  cartCount();
   $('#cartDlg').showModal();
+  $('#cartForm').scrollTop = 0;
 };
-$('#cartClose').onclick = () => $('#cartDlg').close();
+$('#cartClose').onclick = $('#cartX').onclick = () => $('#cartDlg').close();
+$('#cartAll').onclick = () => {
+  const boxes = [...document.querySelectorAll('#cartPick [data-cart]')];
+  const on = cartChecked().length !== boxes.length;
+  boxes.forEach((b) => { b.checked = on; });
+  cartCount();
+};
+$('#cartPick').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-step]');
+  if (!b) return;
+  const n = b.parentElement.querySelector('b');
+  n.textContent = Math.max(1, Math.min(99, (parseInt(n.textContent, 10) || 1) + Number(b.dataset.step)));
+  b.closest('.cartRow').querySelector('[data-cart]').checked = true;
+  cartCount();
+});
+$('#cartPick').addEventListener('change', cartCount);
+$('#cartForm').extra.addEventListener('input', cartCount);
 $('#cartForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const lines = [];
-  document.querySelectorAll('[data-cart]:checked').forEach((c) => {
-    const it = items.find((x) => x.id === c.dataset.cart);
-    const q = document.querySelector(`[data-cartqty="${CSS.escape(c.dataset.cart)}"]`).value;
-    if (it) lines.push({ url: it.orderUrl, qty: q });
-  });
+  const lines = cartChecked().map((c) => ({
+    url: items.find((x) => x.id === c.dataset.cart)?.orderUrl,
+    qty: c.closest('.cartRow').querySelector('.qty b').textContent,
+  })).filter((l) => l.url);
   for (const row of $('#cartForm').extra.value.split('\n')) {
     const m = row.trim().match(/^(\S+)(?:\s*[x×*]\s*(\d+))?$/i);
     if (m) lines.push({ url: m[1], qty: m[2] || 1 });
   }
   if (!lines.length) { alert('請剔選商品或者貼最少一條連結'); return; }
   const out = $('#cartResult');
-  out.innerHTML = '<p class="meta">搵緊商品資料…</p>';
+  out.hidden = false;
+  out.innerHTML = '<p class="cartWait"><span class="spinner small"></span>搵緊商品資料…</p>';
+  $('#cartForm').scrollTop = 0;
   $('#cartGo').disabled = true;
   try {
     const r = await api('POST', '/api/cart', { lines });
-    out.innerHTML = r.items.map((it) => it.ok
-      ? `<p class="cartLine">✅ ${esc(it.title)}${it.variantTitle ? `（${esc(it.variantTitle)}）` : ''} × ${it.qty}${it.available ? '' : ' <b class="warn">（而家顯示未有貨／未開賣）</b>'}${it.manyVariants ? ' <b class="warn">有幾款，揀咗第一款有貨嘅，請喺付款頁檢查</b>' : ''}</p>`
-      : `<p class="cartLine">❌ ${esc(it.url)}<br><span class="meta">${esc(it.error)}</span></p>`).join('') +
-      r.carts.map((c) => `<div class="cartGo"><a class="btn primary" href="${esc(c.url)}" target="_blank" rel="noopener">🛒 打開 ${esc(c.shop)}（${c.count} 件）</a>
-        <button type="button" data-copy="${esc(c.url)}">複製連結</button></div>`).join('');
-  } catch (err) { out.innerHTML = `<p class="cartLine">❌ ${esc(err.message || err)}</p>`; }
+    const notYet = r.items.some((it) => it.ok && !it.available);
+    out.innerHTML =
+      r.carts.map((c) => `<a class="cartOpen" href="${esc(c.url)}" target="_blank" rel="noopener">🛒 打開付款頁（${c.count} 件）<small>${esc(c.shop)}</small></a>
+        <button type="button" class="small cartCopy" data-copy="${esc(c.url)}">複製連結</button>`).join('') +
+      (notYet ? '<p class="cartNote">⏳ 有啲商品顯示「未開賣」——開賣前係正常嘅，到鐘再撳上面個掣就得。</p>' : '') +
+      '<ul class="cartList">' + r.items.map((it) => it.ok
+        ? `<li>${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : '<span class="noimg">🐰</span>'}
+            <span class="cartName">${esc(it.title)}${it.variantTitle ? `<small>款式：${esc(it.variantTitle)}${it.manyVariants ? '（有幾款，請喺付款頁核對）' : ''}</small>` : ''}</span>
+            <span class="cartMeta">× ${it.qty}${it.available ? '' : '<em>未開賣</em>'}</span></li>`
+        : `<li class="bad"><span class="noimg">❌</span><span class="cartName">${esc(it.error)}<small>${esc(it.url || '')}</small></span></li>`).join('') + '</ul>';
+  } catch (err) { out.innerHTML = `<p class="cartNote bad">❌ ${esc(err.message || err)}</p>`; }
   $('#cartGo').disabled = false;
+  $('#cartForm').scrollTop = 0;
 });
 $('#cartResult').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-copy]');

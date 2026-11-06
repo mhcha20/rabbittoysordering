@@ -112,13 +112,17 @@
 </dialog>
 
 <dialog id="cartDlg">
-  <form id="cartForm" method="dialog" class="linkForm">
-    <h2>🛒 一次過買（Shopify 商店，例如 ちいかわマーケット）</h2>
-    <p class="meta wide">剔選想買嘅商品或者貼連結，撳「砌購物車連結」。之後一撳「打開」就會直接去付款頁，入面已經有齊所有商品。建議開賣前先砌好連結，到鐘即刻撳。</p>
-    <div id="cartPick" class="wide cartPick"></div>
-    <label class="wide">其他商品連結（一行一條；要多過一件就喺尾加「 x2」）<textarea name="extra" rows="4" placeholder="https://chiikawamarket.jp/products/4571609412281&#10;https://chiikawamarket.jp/products/4571609414117 x2"></textarea></label>
-    <div id="cartResult" class="wide"></div>
-    <div class="formBtns"><span class="grow"></span><button type="button" id="cartClose">關閉</button><button type="submit" class="primary" value="ok" id="cartGo">砌購物車連結</button></div>
+  <form id="cartForm" method="dialog" class="cartForm">
+    <div class="dlgHead"><h2>🛒 一次過買</h2><button type="button" id="cartX" class="xbtn" aria-label="關閉">✕</button></div>
+    <p class="cartHint">剔選想買嘅商品，撳下面粉紅色掣，再撳「打開付款頁」就會一次過放晒入購物車。只限 ちいかわマーケット 呢類 Shopify 網店。</p>
+    <div id="cartResult" class="cartResult" hidden></div>
+    <div class="cartPickHead" id="cartPickHead"><b>想預訂嘅商品</b><button type="button" id="cartAll" class="small">全選</button></div>
+    <div id="cartPick" class="cartPick"></div>
+    <details class="cartExtra" id="cartExtra">
+      <summary>＋ 貼其他商品連結</summary>
+      <textarea name="extra" rows="4" placeholder="一行一條連結；要買多過一件就喺尾加「 x2」"></textarea>
+    </details>
+    <div class="formBtns"><button type="button" id="cartClose">關閉</button><span class="grow"></span><button type="submit" class="primary" value="ok" id="cartGo">砌購物車連結</button></div>
   </form>
 </dialog>
 
