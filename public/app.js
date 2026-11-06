@@ -206,10 +206,15 @@ function render() {
 
 // ---------- editor ----------
 function renderThumbs() {
-  $('#photoPreview').innerHTML = editing.photos.map((src, i) =>
-    `<div class="thumb"><img src="${esc(src)}" alt=""><button type="button" data-rm="${i}" title="移除">×</button></div>`).join('');
+  editing.photos = editing.photos || [];
+  editing.orderShots = editing.orderShots || [];
+  const thumbs = (list, kind) => list.map((src, i) =>
+    `<div class="thumb"><img src="${esc(src)}" alt=""><button type="button" data-rm="${i}" data-kind="${kind}" title="移除">×</button></div>`).join('');
+  $('#photoPreview').innerHTML = thumbs(editing.photos, 'photo');
+  const shots = $('#shotPreview');
+  if (shots) shots.innerHTML = thumbs(editing.orderShots, 'shot');
 }
-const blankItem = (kind = tab) => ({ id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6), kind, link: '', orderUrl: '', deadline: '', platform: '', orderNo: '', orderDate: '', name: '', qty: 1, currency: 'JPY', price: 0, shipping: 0, shipDate: '', delivery: '', status: kind === 'wish' ? '想買' : '已下單', notes: '', photos: [] });
+const blankItem = (kind = tab) => ({ id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6), kind, link: '', orderUrl: '', deadline: '', platform: '', orderNo: '', orderDate: '', name: '', qty: 1, currency: 'JPY', price: 0, shipping: 0, shipDate: '', delivery: '', status: kind === 'wish' ? '想買' : '已下單', notes: '', photos: [], orderShots: [] });
 function openEditor(it, { isNew = !it, title } = {}) {
   editing = it ? JSON.parse(JSON.stringify(it)) : blankItem();
   $('#dlgTitle').textContent = title || (isNew ? '新增商品' : '商品詳情 / 編輯');
@@ -260,6 +265,13 @@ $('#photoFile').onchange = async (e) => {
   }
   e.target.value = ''; renderThumbs();
 };
+$('#shotFile').onchange = async (e) => {
+  editing.orderShots = editing.orderShots || [];
+  for (const file of e.target.files) {
+    try { editing.orderShots.push(await resizeImage(file)); } catch { alert('無法讀取圖片：' + file.name); }
+  }
+  e.target.value = ''; renderThumbs();
+};
 $('#photoFind').onclick = async () => {
   const f = $('#form');
   if (!f.name.value.trim()) { alert('請先填商品名稱'); return; }
@@ -279,9 +291,12 @@ $('#photoUrl').onclick = () => {
   const u = prompt('貼上圖片網址（https://…）');
   if (u && /^https?:\/\//.test(u.trim())) { editing.photos.push(u.trim()); renderThumbs(); }
 };
-$('#photoPreview').onclick = (e) => {
+$('#photoPreview').onclick = $('#shotPreview').onclick = (e) => {
   const rm = e.target.dataset.rm;
-  if (rm !== undefined) { editing.photos.splice(+rm, 1); renderThumbs(); return; }
+  if (rm !== undefined) {
+    const list = e.target.dataset.kind === 'shot' ? editing.orderShots : editing.photos;
+    list.splice(+rm, 1); renderThumbs(); return;
+  }
   if (e.target.tagName === 'IMG') { $('#lbImg').src = e.target.src; $('#lightbox').showModal(); }
 };
 $('#lbClose').onclick = () => $('#lightbox').close();
@@ -369,12 +384,16 @@ function aiError(err) {
   try { msg = JSON.parse(msg.replace(/^\d+ /, '')).error || msg; } catch { /* plain text */ }
   alert('AI 分析失敗：' + msg);
 }
-function startDrafts(result, extraPhotos) {
+function startDrafts(result, extraPhotos, { asOrder = false } = {}) {
   if (!result.items?.length) { alert('AI 搵唔到商品資料。' + (result.summary || '')); return; }
   const total = result.items.length;
   aiQueue = result.items.map((d, i) => ({
     n: i + 1, total,
-    item: { ...blankItem(d.kind), ...d, notes: d.notes || '', photos: d.photos || [] },
+    item: {
+      ...blankItem(d.kind), ...d, notes: d.notes || '',
+      photos: d.photos || [],
+      orderShots: asOrder ? extraPhotos : [],
+    },
   }));
   alert(`AI 搵到 ${total} 件商品。\n${result.summary || ''}\n\n會逐件打開，請檢查資料，啱就按「儲存」，唔要就按「取消」。`);
   openNextDraft();
@@ -393,7 +412,7 @@ $('#aiFile').onchange = async (e) => {
     const images = await Promise.all(files.map((f) => resizeImage(f, 1800)));
     const result = await api('POST', '/api/ai/parse', { images });
     $('#aiBusy').close();
-    startDrafts(result, images); // keep the screenshot too
+    startDrafts(result, images, { asOrder: true });
   } catch (err) { aiError(err); }
 };
 
@@ -427,7 +446,9 @@ const toDataUrl = async (src) => {
 $('#btnExport').onclick = async () => {
   // embed uploaded photos so the backup file is self-contained
   const out = await Promise.all(items.map(async (it) => ({
-    ...it, photos: await Promise.all(it.photos.map((p) => (p.startsWith('/photos/') ? toDataUrl(p).catch(() => p) : p))),
+    ...it,
+    photos: await Promise.all((it.photos || []).map((p) => (p.startsWith('/photos/') ? toDataUrl(p).catch(() => p) : p))),
+    orderShots: await Promise.all((it.orderShots || []).map((p) => (String(p).startsWith('/photos/') ? toDataUrl(p).catch(() => p) : p))),
   })));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: 'application/json' }));
@@ -441,7 +462,7 @@ $('#fileImport').onchange = async (e) => {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data)) throw 0;
     if (!confirm(`匯入 ${data.length} 筆資料，會取代目前所有記錄，確定？`)) return;
-    items = (await api('PUT', '/api/items', data.map((d) => ({ photos: [], notes: '', ...d })))).items;
+    items = (await api('PUT', '/api/items', data.map((d) => ({ photos: [], orderShots: [], notes: '', ...d })))).items;
     render();
   } catch { alert('備份檔格式不正確'); }
 };

@@ -52,11 +52,19 @@
   <form id="form" method="dialog">
     <div class="dlgHead"><h2 id="dlgTitle">新增商品</h2><button type="button" id="dlgX" class="xbtn" aria-label="關閉">✕</button></div>
     <div class="photos">
+      <p class="shotLabel">商品相</p>
       <div id="photoPreview" class="thumbs"></div>
       <div class="photoBtns">
-        <label class="btn">📷 上傳照片（可多張）<input type="file" id="photoFile" accept="image/*" multiple hidden></label>
+        <label class="btn">📷 上傳商品相<input type="file" id="photoFile" accept="image/*" multiple hidden></label>
         <button type="button" id="photoFind">搵官方圖</button>
         <button type="button" id="photoUrl">貼上圖片網址</button>
+      </div>
+    </div>
+    <div class="photos orderOnly">
+      <p class="shotLabel">訂單截圖（只放呢度，唔會出現喺商品卡）</p>
+      <div id="shotPreview" class="thumbs"></div>
+      <div class="photoBtns">
+        <label class="btn">🧾 上傳訂單截圖<input type="file" id="shotFile" accept="image/*" multiple hidden></label>
       </div>
     </div>
     <label class="wide">商品名稱<input name="name" required></label>

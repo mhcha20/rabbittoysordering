@@ -50,8 +50,8 @@ function imageExt(buf) {
   if (buf.length > 12 && buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WEBP') return 'webp';
   return '';
 }
-function storePhotos(item) {
-  item.photos = (Array.isArray(item.photos) ? item.photos : []).map((p) => {
+function storeList(list) {
+  return (Array.isArray(list) ? list : []).map((p) => {
     const m = /^data:image\/(png|jpe?g|webp|gif);base64,(.+)$/s.exec(p || '');
     if (!m) return p;
     const buf = Buffer.from(m[2], 'base64');
@@ -61,6 +61,10 @@ function storePhotos(item) {
     fs.writeFileSync(path.join(PHOTO_DIR, name), buf);
     return '/photos/' + name;
   }).filter(Boolean);
+}
+function storePhotos(item) {
+  item.photos = storeList(item.photos);
+  item.orderShots = storeList(item.orderShots);
   return item;
 }
 
@@ -102,6 +106,51 @@ async function keepLocalPhotos(item) {
 }
 rehostExisting().catch((e) => console.error('rehost photos', e.message));
 
+// A phone screenshot is tall. Product photos are not. Move the tall ones out of the product gallery once.
+function imageSize(buf) {
+  if (buf[0] === 0xFF && buf[1] === 0xD8) {
+    let i = 2;
+    while (i < buf.length - 9) {
+      if (buf[i] !== 0xFF) { i++; continue; }
+      const marker = buf[i + 1];
+      if (marker === 0xC0 || marker === 0xC1 || marker === 0xC2) return { w: buf.readUInt16BE(i + 7), h: buf.readUInt16BE(i + 5) };
+      if (marker === 0xD8 || marker === 0xD9 || (marker >= 0xD0 && marker <= 0xD7)) { i += 2; continue; }
+      i += 2 + buf.readUInt16BE(i + 2);
+    }
+  }
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf.length > 24) return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  if (buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WEBP' && buf.slice(12, 16).toString() === 'VP8X' && buf.length >= 30) {
+    return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) };
+  }
+  return null;
+}
+function isReceiptPhoto(p) {
+  if (!String(p).startsWith('/photos/')) return false;
+  try {
+    const size = imageSize(fs.readFileSync(path.join(PHOTO_DIR, path.basename(p))));
+    return !!(size && size.h > size.w * 1.35);
+  } catch { return false; }
+}
+function splitOrderShots() {
+  const flag = path.join(DATA_DIR, '.order-shots-split');
+  if (fs.existsSync(flag)) return;
+  let changed = false;
+  for (const it of items) {
+    const shots = Array.isArray(it.orderShots) ? it.orderShots.slice() : [];
+    const photos = [];
+    for (const p of it.photos || []) (isReceiptPhoto(p) ? shots : photos).push(p);
+    const next = [...new Set(shots)];
+    if (photos.length !== (it.photos || []).length || next.length !== (it.orderShots || []).length) {
+      it.photos = photos;
+      it.orderShots = next;
+      changed = true;
+    }
+  }
+  if (changed) persist();
+  fs.writeFileSync(flag, new Date().toISOString());
+}
+splitOrderShots();
+
 // Status "已收貨" carries the date it was received and the status to go back to if it is un-ticked.
 function hkToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
 function receivedFields(raw) {
@@ -122,7 +171,7 @@ function cleanItem(raw) {
     kind: raw.kind === 'wish' ? 'wish' : 'order', link: /^https?:\/\//.test(s(raw.link)) ? s(raw.link) : '', orderUrl: /^https?:\/\//.test(s(raw.orderUrl)) ? s(raw.orderUrl) : '', deadline: s(raw.deadline), remindAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s(raw.remindAt)) ? s(raw.remindAt) : '',
     name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: CURRENCIES.includes(raw.currency) ? raw.currency : 'JPY',
     price: Number(raw.price) || 0, shipping: Number(raw.shipping) || 0, shipDate: s(raw.shipDate), delivery: s(raw.delivery),
-    status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos,
+    status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos, orderShots: raw.orderShots,
     ...receivedFields(raw),
   });
 }
