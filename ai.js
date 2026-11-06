@@ -297,7 +297,7 @@ async function callXai({ instructions, input, schema, effort, maxOutput, search 
 }
 
 async function runGrok({ system, schema, content }) {
-  const instructions = system + '\n\nYou are the backup model because Anthropic credits are exhausted. Use web search and open the official product page. Only put image URLs you actually saw (page images, og:image, or image-search results) into photoUrls. Never invent a URL.';
+  const instructions = system + '\n\nYou are the backup model because Anthropic credits are exhausted. Use web search and open the official product page. photoUrls must be direct photographs of the product itself (shop CDN, official page, or image-search results). Never use the user\'s order screenshot, a receipt, a logo, or an icon. Never invent a URL.';
   const input = [{ role: 'user', content: xaiInput(content) }];
   let data;
   try {
@@ -338,11 +338,94 @@ async function checkPhotos(result) {
   return result;
 }
 
+const IMG_URL = /https:\/\/[^\s"'<>\\)]+?\.(?:jpe?g|png|webp)(?:\?[^\s"'<>\\)]*)?/gi;
+function likelyProductImage(url) {
+  const u = String(url || '').toLowerCase();
+  if (!u.startsWith('https://')) return false;
+  if (/(logo|icon|sprite|favicon|pixel|badge|payment|visa|banner|header|footer|avatar|emoji|button)/.test(u)) return false;
+  if (/(16x16|32x32|48x48|1x1)/.test(u)) return false;
+  return true;
+}
+function collectImageUrls(text) {
+  return [...new Set(String(text || '').match(IMG_URL) || [])].filter(likelyProductImage);
+}
+function imageScore(url) {
+  const u = url.toLowerCase();
+  let s = 0;
+  if (/cdn\.shopify|\/cdn\/shop\/|\/products\/|product/.test(u)) s += 3;
+  if (/\.(jpe?g|png|webp)(\?|$)/.test(u)) s += 1;
+  return s;
+}
+async function pageImages(url) {
+  if (!/^https:\/\//.test(url || '')) return [];
+  try {
+    const r = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'ja,zh-HK;q=0.8,en;q=0.6' } });
+    if (!r.ok) return [];
+    const html = (await r.text()).slice(0, 1_500_000);
+    return collectImageUrls(html).sort((a, b) => imageScore(b) - imageScore(a)).slice(0, 6);
+  } catch { return []; }
+}
+
+// The card should show the product, not the order screenshot. Look the photo up when the first pass found none.
+async function searchOfficialPhotos(items) {
+  if (!process.env.XAI_API_KEY || !items.length) return;
+  const lines = items.map((it, i) => `${i + 1}. ${it.name} | ${it.platform || ''} | ${it.orderUrl || ''}`).join('\n');
+  let data;
+  try {
+    data = await callXai({
+      instructions: 'Find the official product photo for each numbered item. Use web search. Return JSON only, matching the schema. urls must be direct https image files of that exact product from the shop or maker. Never return an order-page screenshot, a logo, an icon, or a URL you did not see.',
+      input: lines,
+      schema: {
+        type: 'object', additionalProperties: false, required: ['n', 'urls'],
+        properties: { n: { type: 'integer' }, urls: { type: 'array', items: { type: 'string' } } },
+      },
+      effort: 'low', maxOutput: 2000, search: true,
+    });
+  } catch (e) {
+    console.error('official photo search', e.message);
+    return;
+  }
+  let grouped = null;
+  try { grouped = parseJsonLoose(extractOutputText(data)); } catch { grouped = null; }
+  const byN = new Map();
+  for (const row of grouped?.items || []) {
+    if (row && row.n) byN.set(Number(row.n), row.urls || row.photoUrls || []);
+  }
+  for (let i = 0; i < items.length; i++) {
+    const urls = [...new Set((byN.get(i + 1) || []).filter(likelyProductImage))].slice(0, 4);
+    const checks = await Promise.all(urls.map(isImage));
+    const ok = urls.filter((_, j) => checks[j]);
+    if (ok.length) items[i].photos = ok.slice(0, 3);
+  }
+}
+
+async function ensureOfficialPhotos(result) {
+  for (const item of result.items) {
+    const urls = [...new Set([...(item.photos || []), ...await pageImages(item.orderUrl)])]
+      .filter(likelyProductImage)
+      .sort((a, b) => imageScore(b) - imageScore(a))
+      .slice(0, 6);
+    const checks = await Promise.all(urls.map(isImage));
+    item.photos = urls.filter((_, i) => checks[i]).slice(0, 3);
+  }
+  const missing = result.items.filter((it) => !(it.photos || []).length);
+  if (missing.length) await searchOfficialPhotos(missing);
+  return result;
+}
+
+async function findOfficialPhotos({ name, platform, orderUrl }) {
+  const item = { name: String(name || '').slice(0, 300), platform: String(platform || '').slice(0, 120), orderUrl: /^https?:\/\//.test(orderUrl || '') ? String(orderUrl).slice(0, 2000) : '', photos: [] };
+  if (!item.name) throw fail(400, '未有商品名稱');
+  await ensureOfficialPhotos({ items: [item] });
+  if (!item.photos.length) throw fail(404, '搵唔到呢件商品嘅官方圖，可以自己上傳。');
+  return { photos: item.photos };
+}
+
 async function parseOrder({ images, hint }) {
   const content = imageBlocks(images);
   if (!content.length) throw fail(400, '請上傳至少一張截圖');
   content.push({ type: 'text', text: `今日日期：${new Date().toISOString().slice(0, 10)}。${hint ? '用戶補充：' + hint : ''}\n請分析以上訂單截圖並找出每件商品的資料同官方圖片。` });
-  const result = await checkPhotos(await runAI({ system: SYSTEM, schema: ITEM_SCHEMA, content }));
+  const result = await ensureOfficialPhotos(await checkPhotos(await runAI({ system: SYSTEM, schema: ITEM_SCHEMA, content })));
   for (const item of result.items) item.kind = 'order';
   return result;
 }
@@ -361,7 +444,7 @@ async function parseWish({ link, images, hint }) {
     hint ? `用戶補充：${hint}` : '',
     '請搵出呢個帖文介紹嘅商品資料（官方名稱、價錢、預訂截止、發售日、喺邊度預訂）同官方圖片。',
   ].filter(Boolean).join('\n') });
-  const result = await checkPhotos(await runAI({ system: WISH_SYSTEM, schema: WISH_SCHEMA, content }));
+  const result = await ensureOfficialPhotos(await checkPhotos(await runAI({ system: WISH_SYSTEM, schema: WISH_SCHEMA, content })));
   for (const item of result.items) {
     Object.assign(item, { kind: 'wish', status: '想買', link: link || '', qty: 1, shipping: 0 });
     if (postImage) item.photos.push(postImage); // the post's own picture as a fallback / extra
@@ -426,4 +509,4 @@ async function answerQuestion(question, items) {
   return '（已改用 xAI）' + await answerWithGrok(question, records, now);
 }
 
-module.exports = { parseOrder, parseWish, answerQuestion };
+module.exports = { parseOrder, parseWish, answerQuestion, findOfficialPhotos };

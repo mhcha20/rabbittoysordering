@@ -163,7 +163,7 @@ function render() {
   if (view === 'grid') {
     el.innerHTML = list.map((it) => `
       <article class="card ${it.status === '已取消' ? 'cancelled' : ''} ${it.status === '已收貨' ? 'received' : ''} ${it.status === '已放棄' ? 'dropped' : ''}" data-id="${esc(it.id)}">
-        <div class="pic">${it.photos.length ? `<div class="slides">${[...it.photos].sort((a, b) => Number(!String(a).startsWith('/photos/')) - Number(!String(b).startsWith('/photos/'))).map((src) => `<img src="${esc(src)}" alt="">`).join('')}</div>` : '尚無照片'}
+        <div class="pic">${it.photos.length ? `<div class="slides">${it.photos.map((src) => `<img src="${esc(src)}" alt="">`).join('')}</div>` : '尚無照片'}
           ${it.photos.length > 1 ? `<button type="button" class="nav prev" data-slide="-1" aria-label="上一張">‹</button><button type="button" class="nav next" data-slide="1" aria-label="下一張">›</button><span class="cnt">1 / ${it.photos.length}</span>` : ''}</div>
         <div class="body">
           ${kindOf(it) === 'wish' ? `
@@ -259,6 +259,21 @@ $('#photoFile').onchange = async (e) => {
     try { editing.photos.push(await resizeImage(file)); } catch { alert('無法讀取圖片：' + file.name); }
   }
   e.target.value = ''; renderThumbs();
+};
+$('#photoFind').onclick = async () => {
+  const f = $('#form');
+  if (!f.name.value.trim()) { alert('請先填商品名稱'); return; }
+  const btn = $('#photoFind');
+  btn.disabled = true; btn.textContent = '搵緊…';
+  try {
+    const { photos } = await api('POST', '/api/ai/photos', { name: f.name.value.trim(), platform: f.platform.value.trim(), orderUrl: f.orderUrl.value.trim() });
+    if (photos?.length) { editing.photos = photos; renderThumbs(); }
+    else alert('搵唔到官方圖。');
+  } catch (err) {
+    let msg = err.message || String(err);
+    try { msg = JSON.parse(msg.replace(/^\d+ /, '')).error || msg; } catch { /* plain */ }
+    alert(msg);
+  } finally { btn.disabled = false; btn.textContent = '搵官方圖'; }
 };
 $('#photoUrl').onclick = () => {
   const u = prompt('貼上圖片網址（https://…）');
@@ -359,7 +374,7 @@ function startDrafts(result, extraPhotos) {
   const total = result.items.length;
   aiQueue = result.items.map((d, i) => ({
     n: i + 1, total,
-    item: { ...blankItem(d.kind), ...d, notes: d.notes || '', photos: [...extraPhotos, ...(d.photos || [])] },
+    item: { ...blankItem(d.kind), ...d, notes: d.notes || '', photos: d.photos || [] },
   }));
   alert(`AI 搵到 ${total} 件商品。\n${result.summary || ''}\n\n會逐件打開，請檢查資料，啱就按「儲存」，唔要就按「取消」。`);
   openNextDraft();

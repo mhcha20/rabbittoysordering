@@ -4,7 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { parseOrder, parseWish, answerQuestion } = require('./ai');
+const { parseOrder, parseWish, answerQuestion, findOfficialPhotos } = require('./ai');
 const { createTelegram } = require('./telegram');
 
 const PORT = process.env.PORT || 3000;
@@ -90,6 +90,16 @@ async function rehostExisting() {
   }
   if (changed) persist();
 }
+async function keepLocalPhotos(item) {
+  const next = [];
+  for (const p of item.photos || []) {
+    if (!/^https:\/\//.test(p)) { next.push(p); continue; }
+    const local = await rehostRemote(p);
+    if (local) next.push(local);
+  }
+  if (next.length) item.photos = next;
+  return item;
+}
 rehostExisting().catch((e) => console.error('rehost photos', e.message));
 
 // Status "已收貨" carries the date it was received and the status to go back to if it is un-ticked.
@@ -164,7 +174,7 @@ const server = http.createServer(async (req, res) => {
     }
     const m = /^\/api\/items\/([^/]+)$/.exec(p);
     if (m && req.method === 'PUT') {
-      const item = cleanItem({ ...(await readBody(req)), id: m[1] });
+      const item = await keepLocalPhotos(cleanItem({ ...(await readBody(req)), id: m[1] }));
       const i = items.findIndex((x) => x.id === item.id);
       if (i >= 0) items[i] = item; else items.unshift(item);
       persist();
@@ -173,6 +183,12 @@ const server = http.createServer(async (req, res) => {
     if (m && req.method === 'DELETE') {
       items = items.filter((x) => x.id !== m[1]); persist();
       return send(res, 200, { version });
+    }
+    if (p === '/api/ai/photos' && req.method === 'POST') {
+      const body = await readBody(req);
+      const found = await findOfficialPhotos({ name: body?.name, platform: body?.platform, orderUrl: body?.orderUrl });
+      found.photos = (await keepLocalPhotos({ photos: found.photos })).photos;
+      return send(res, 200, found);
     }
     if (p === '/api/ai/parse' && req.method === 'POST') {
       const body = await readBody(req);
