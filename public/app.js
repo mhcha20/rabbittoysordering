@@ -291,7 +291,7 @@ async function readShots() {
     const images = await Promise.all(shots.map((p) => (String(p).startsWith('data:') ? p : toDataUrl(p))));
     const r = await api('POST', '/api/ai/receipt', { images, name: f.name.value.trim() });
     if (editing !== target || !$('#dlg').open) return; // editor moved on
-    const line = r.lines?.[r.match];
+    const line = r.lines?.find((l) => l.matchId === 'edit');
     const filled = [];
     const set = (k, v, label) => { if (v === '' || v == null) return; if (String(f[k].value) !== String(v)) { f[k].value = v; filled.push(label); } };
     set('orderNo', r.orderNo, '訂單編號');
@@ -408,6 +408,7 @@ function setTab(t) {
   $('#aiFileBtn').hidden = t === 'wish';
   $('#btnLink').hidden = t !== 'wish';
   $('#btnCart').hidden = t !== 'wish';
+  $('#receiptBtn').hidden = t !== 'wish';
   $('#fPickup').hidden = t === 'wish';
   $('#fStatus').innerHTML = '<option value="">全部狀態</option>' +
     (t === 'order' ? '<option value="__pending">未收貨（全部）</option>' : '') + statusesFor(t).map((s) => `<option>${s}</option>`).join('');
@@ -595,6 +596,100 @@ $('#cartResult').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-copy]');
   if (!b) return;
   try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = '已複製 ✓'; } catch { prompt('複製呢條連結：', b.dataset.copy); }
+});
+
+// ---------- one receipt -> several wishlist items become orders ----------
+let rcpt = null; // { r, images }
+const liveWishes = () => items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄');
+$('#receiptFile').onchange = async (e) => {
+  const files = [...e.target.files].slice(0, 6); e.target.value = '';
+  if (!files.length) return;
+  const busyTxt = $('#aiBusy').querySelector('b'); const old = busyTxt.textContent;
+  busyTxt.textContent = 'AI 讀緊收據，對返你嘅想預訂商品…';
+  $('#aiBusy').showModal();
+  try {
+    const images = await Promise.all(files.map((f) => resizeImage(f, 1800)));
+    const r = await api('POST', '/api/ai/receipt', { images, candidates: liveWishes().map((i) => ({ id: i.id, name: i.name, platform: i.platform })) });
+    $('#aiBusy').close();
+    if (!r.lines?.length) { alert('收據入面搵唔到商品。' + (r.summary || '')); return; }
+    rcpt = { r, images };
+    openReceipt();
+  } catch (err) { aiError(err); } finally { busyTxt.textContent = old; }
+};
+function rcptRowHtml(line, i) {
+  const w = items.find((x) => x.id === line.matchId);
+  const opts = '<option value="">➕ 想預訂冇呢件：新增做新訂單</option>' +
+    liveWishes().map((x) => `<option value="${esc(x.id)}" ${x.id === line.matchId ? 'selected' : ''}>對返：${esc(x.name.slice(0, 60))}</option>`).join('');
+  return `<div class="cartRow rcptRow" data-i="${i}">
+    <label class="cartTap"><input type="checkbox" data-rc="${i}" ${line.matchId ? 'checked' : ''}>
+      ${w?.photos?.[0] ? `<img src="${esc(w.photos[0])}" alt="" loading="lazy">` : '<span class="noimg">🧾</span>'}
+      <span class="cartName">${esc(line.name)}<small>${fmt(rcpt.r.currency, line.price)} × ${line.qty}</small></span>
+    </label>
+    <select data-rm="${i}" aria-label="對應嘅想預訂商品">${opts}</select>
+  </div>`;
+}
+function rcptCount() {
+  const n = document.querySelectorAll('#rcptList [data-rc]:checked').length;
+  $('#rcptGo').textContent = n ? `確認落單（${n} 件）` : '確認落單';
+}
+function openReceipt() {
+  const { r } = rcpt;
+  $('#rcptInfo').innerHTML = `<div class="rcptInfo"><b>${esc(r.platform || '收據')}</b>${r.orderNo ? ` ・ 訂單 ${esc(r.orderNo)}` : ''}${r.orderDate ? ` ・ ${esc(r.orderDate)}` : ''}${r.shipping ? ` ・ 運費 ${fmt(r.currency, r.shipping)}（記喺第一件）` : ''}</div>` +
+    (r.summary ? `<p class="cartNote">${esc(r.summary)}</p>` : '');
+  $('#rcptList').innerHTML = r.lines.map(rcptRowHtml).join('');
+  rcptCount();
+  $('#rcptDlg').showModal();
+  $('#rcptForm').scrollTop = 0;
+}
+$('#rcptList').addEventListener('change', (e) => {
+  const sel = e.target.closest('[data-rm]');
+  if (sel) {
+    const i = +sel.dataset.rm;
+    rcpt.r.lines[i].matchId = sel.value;
+    // the same wish item can only be used once
+    if (sel.value) rcpt.r.lines.forEach((l, j) => { if (j !== i && l.matchId === sel.value) l.matchId = ''; });
+    const checked = [...document.querySelectorAll('#rcptList [data-rc]')].map((c) => c.checked);
+    $('#rcptList').innerHTML = rcpt.r.lines.map(rcptRowHtml).join('');
+    document.querySelectorAll('#rcptList [data-rc]').forEach((c, j) => { c.checked = j === i ? true : checked[j]; });
+  }
+  rcptCount();
+});
+$('#rcptCancel').onclick = $('#rcptX').onclick = () => $('#rcptDlg').close();
+$('#rcptForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const { r, images } = rcpt;
+  const picked = [...document.querySelectorAll('#rcptList [data-rc]:checked')].map((c) => r.lines[+c.dataset.rc]);
+  if (!picked.length) { alert('請剔最少一件'); return; }
+  const btn = $('#rcptGo'); btn.disabled = true;
+  busy = true;
+  let shots = null, done = 0;
+  try {
+    for (const [k, line] of picked.entries()) {
+      btn.textContent = `儲存緊 ${k + 1}/${picked.length}…`;
+      const base = items.find((x) => x.id === line.matchId) || { ...blankItem('order'), name: line.name };
+      const draft = {
+        ...base, kind: 'order', status: '已下單',
+        orderNo: r.orderNo || base.orderNo || '', orderDate: /^\d{4}-\d{2}-\d{2}$/.test(r.orderDate) ? r.orderDate : hkToday(),
+        platform: r.platform || base.platform || '', currency: r.currency || base.currency, price: line.price, qty: line.qty || 1,
+        shipping: k === 0 ? (r.shipping || 0) : 0,
+        orderShots: [...(base.orderShots || []), ...(shots || images)],
+        notes: picked.length > 1 && r.orderNo ? [base.notes, `同一張單 ${r.orderNo} 共 ${picked.length} 件${r.shipping ? `，全單運費 ${fmt(r.currency, r.shipping)} 記喺第一件` : ''}`].filter(Boolean).join('\n') : base.notes || '',
+      };
+      const { item } = await api('PUT', '/api/items/' + encodeURIComponent(draft.id), draft);
+      if (!shots) shots = (item.orderShots || []).slice(-images.length); // reuse the stored files for the other items
+      const i = items.findIndex((x) => x.id === item.id);
+      if (i >= 0) items[i] = item; else items.unshift(item);
+      done++;
+    }
+    $('#rcptDlg').close();
+    render();
+    alert(`已經將 ${done} 件轉做訂單，喺「📦 我的訂單」度。`);
+  } catch (err) {
+    render();
+    showError(err);
+    alert(`做咗 ${done} 件，之後嗰件出錯。可以再試一次（已做嘅唔會重複，因為佢哋已經唔喺想預訂）。`);
+    $('#rcptDlg').close();
+  } finally { busy = false; btn.disabled = false; rcptCount(); }
 });
 
 for (const id of ['#q', '#fPlatform', '#fPickup', '#fStatus', '#fCur', '#sort', '#showCancelled']) $(id).addEventListener('input', render);

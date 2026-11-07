@@ -9,12 +9,13 @@
 - **想預訂（wishlist）**：貼連結，AI 搵商品資料、開賣／截止時間（轉香港時間），睇埋帖文預覽圖（登入牆帖文都認到）（`/api/ai/link`）。
 - **一次過買**（想預訂分頁「🛒 一次過買」）：剔選／貼 Shopify 商品連結（例如 ちいかわマーケット），伺服器讀 `/products/<handle>.js` 攞 variant id，砌 `https://店/cart/id:qty,id:qty` 連結，一撳直接去付款頁（`cart.js`，`POST /api/cart`）。視窗內「＋ 加入」貼連結會即時加卡並存入想預訂。
 - **編輯視窗上載訂單截圖**：自動讀（`/api/ai/receipt`，唔上網，快）訂單編號、日期、店舖、該件商品單價／數量；多件同單嘅運費寫入備註。
+- **收據落單**（想預訂分頁「🧾 上傳收據落單」）：一張收據讀晒所有商品，AI 對返想預訂（`/api/ai/receipt` 帶 `candidates`，每行 `matchId`），確認視窗可改配對，剔咗嘅一次過轉做訂單（已下單；全單運費記第一件；收據相共用同一個檔）；想預訂冇嘅可新增訂單。
 - 篩選：取貨／送貨地點、未收貨；一撳切換已收貨（會先問）；手機版表格變直排卡片；編輯視窗手機全螢幕（頂部 ✕、底部儲存欄固定）。
 - **Telegram bot**（`telegram.js`）：預訂提醒（提醒時間前 15 分鐘＋到鐘）、有時間嘅截止前 2 小時「快截止」、截止前一日 09:00（香港）預告；指令 `/next`（最近要預訂＋倒數）、`/wish`、`/pending`（未收貨），自由發問用 Claude 答。任何人都用得指令；非主人每日自由發問有上限（`TG_DAILY_PER_USER`、`TG_DAILY_TOTAL`）；提醒只發去連結咗嘅主人 chat（`/start` 綁定，存喺 `DATA_DIR`）。
 
 ## 檔案
 - `server.js`：零依賴 Node 伺服器（除咗 `@anthropic-ai/sdk`）。全站 HTTP Basic auth（`APP_PASSWORD`）；`/healthz` 開放。
-  API：`GET/PUT /api/items`（PUT＝整份覆蓋，匯入備份用）、`PUT/DELETE /api/items/<id>`、`POST /api/ai/parse`、`POST /api/ai/link`、`POST /api/cart`、`GET /api/telegram`、`POST /api/telegram/test`、`GET /photos/<檔名>`。
+  API：`GET/PUT /api/items`（PUT＝整份覆蓋，匯入備份用）、`PUT/DELETE /api/items/<id>`、`POST /api/ai/parse`、`POST /api/ai/link`、`POST /api/ai/receipt`、`POST /api/cart`、`GET /api/telegram`、`POST /api/telegram/test`、`GET /photos/<檔名>`。
 - `ai.js`：Claude（`claude-opus-5-5`）JSON schema 抽取訂單／wishlist、答問題。
 - `cart.js`：Shopify 多件購物車連結。
 - `telegram.js`：bot 輪詢、每分鐘 tick 發提醒。

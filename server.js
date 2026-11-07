@@ -243,7 +243,10 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/ai/receipt' && req.method === 'POST') {
       const body = await readBody(req);
       const images = Array.isArray(body?.images) ? body.images.slice(0, 6) : [];
-      return send(res, 200, await readReceipt({ images, name: String(body?.name || '').slice(0, 300) }));
+      const candidates = (Array.isArray(body?.candidates) ? body.candidates : []).slice(0, 300)
+        .map((c) => ({ id: String(c?.id || '').slice(0, 80), name: String(c?.name || '').slice(0, 200), platform: String(c?.platform || '').slice(0, 80) }))
+        .filter((c) => c.id && c.name);
+      return send(res, 200, await readReceipt({ images, name: String(body?.name || '').slice(0, 300), candidates }));
     }
     if (p === '/api/ai/parse' && req.method === 'POST') {
       const body = await readBody(req);

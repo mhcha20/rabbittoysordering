@@ -435,31 +435,40 @@ async function parseOrder({ images, hint }) {
 const RECEIPT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['platform', 'orderNo', 'orderDate', 'currency', 'shipping', 'lines', 'match', 'summary'],
+  required: ['platform', 'orderNo', 'orderDate', 'currency', 'shipping', 'lines', 'summary'],
   properties: {
     platform: { type: 'string', description: 'Shop name as shown, empty if not shown' },
     orderNo: { type: 'string', description: 'Order number copied exactly, character by character, including any prefix such as # or CHIIKAWA-' },
     orderDate: { type: 'string', description: 'YYYY-MM-DD, or empty' },
     currency: { type: 'string', enum: CURRENCIES },
     shipping: { type: 'number', description: 'Shipping for the whole order, 0 if none or not shown' },
-    lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'qty', 'price'], properties: {
+    lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'qty', 'price', 'matchId'], properties: {
       name: { type: 'string', description: 'Product name exactly as shown' },
       qty: { type: 'integer' },
       price: { type: 'number', description: 'Unit price (line total divided by qty)' },
+      matchId: { type: 'string', description: "id of the user's product that is this same product, or empty if none is" },
     } } },
-    match: { type: 'integer', description: 'Index in lines of the product the user is editing, or -1 if none matches' },
-    summary: { type: 'string', description: 'One short sentence in Cantonese (Traditional Chinese): what matched and anything to double-check' },
+    summary: { type: 'string', description: 'One or two short sentences in Cantonese (Traditional Chinese): what matched and anything to double-check' },
   },
 };
 const RECEIPT_SYSTEM = `You read order confirmations and receipts for a Hong Kong collector of Japanese character goods.
-Copy order numbers and prices exactly as printed; never guess. A screenshot set may show the same order in several views: list each product once.
-The user is editing one product; pick the line that is the same product. Japanese names can differ slightly (brackets, spaces, version names such as 悪いバージョン); the version or variant must match.`;
+Copy order numbers and prices exactly as printed; never guess. A screenshot set may show the same order in several views (a list and a receipt): list each product once, with every product in the order.
+The user gives a list of their own products (id | name | shop). For each receipt line, set matchId to the id of the same product, or empty if none is.
+Names can be written differently (Japanese vs Chinese, brackets, spaces, a 【抽選販売】 prefix, the brand ちいかわ in front), but the version or variant must match: 超まじかる, 悪いバージョン, てんし♡あくま and the plain まじかるちいかわ are different products. Use each id at most once.`;
 
-async function readReceipt({ images, name }) {
+async function readReceipt({ images, name, candidates }) {
   const content = imageBlocks(images);
   if (!content.length) throw fail(400, '請上傳至少一張截圖');
-  content.push({ type: 'text', text: `今日日期：${new Date().toISOString().slice(0, 10)}。\n用戶而家編輯緊嘅商品：${name || '（未填名）'}` });
+  const list = name ? [{ id: 'edit', name, platform: '' }] : (candidates || []);
+  const lines = list.map((c) => `${c.id} | ${c.name} | ${c.platform || ''}`).join('\n');
+  content.push({ type: 'text', text: `今日日期：${new Date().toISOString().slice(0, 10)}。\n用戶嘅商品（id | 名 | 店）：\n${lines || '（冇）'}` });
   const out = await runAI({ system: RECEIPT_SYSTEM, schema: RECEIPT_SCHEMA, content, web: false, raw: true });
+  const ids = new Set(list.map((c) => c.id));
+  const used = new Set();
+  for (const l of out.lines || []) {
+    if (!ids.has(l.matchId) || used.has(l.matchId)) l.matchId = '';
+    else used.add(l.matchId);
+  }
   return out;
 }
 

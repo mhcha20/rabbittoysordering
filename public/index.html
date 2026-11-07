@@ -13,6 +13,7 @@
     <label class="btn primary" id="aiFileBtn">📷 截圖自動新增<input type="file" id="aiFile" accept="image/*" multiple hidden></label>
     <button id="btnLink" class="primary" hidden>🔗 貼連結新增</button>
     <button id="btnCart" hidden>🛒 一次過買</button>
+    <label class="btn" id="receiptBtn" hidden>🧾 上傳收據落單<input type="file" id="receiptFile" accept="image/*" multiple hidden></label>
     <button id="btnAdd">＋ 手動新增</button>
     <button id="btnTg" title="Telegram 通知">🔔 通知</button>
     <button id="btnExport">匯出備份</button>
@@ -126,6 +127,16 @@
     </div>
     <p class="cartAddHint">加入嘅商品會順手存入「想預訂」，下次都喺度。</p>
     <div class="formBtns"><button type="button" id="cartClose">關閉</button><span class="grow"></span><button type="submit" class="primary" value="ok" id="cartGo">砌購物車連結</button></div>
+  </form>
+</dialog>
+
+<dialog id="rcptDlg">
+  <form id="rcptForm" method="dialog" class="cartForm">
+    <div class="dlgHead"><h2>🧾 收據落單</h2><button type="button" id="rcptX" class="xbtn" aria-label="關閉">✕</button></div>
+    <div id="rcptInfo" class="cartResult"></div>
+    <p class="cartHint">剔咗嘅商品會轉做「我的訂單」（已下單），填好訂單編號、日期同價錢。對錯咗可以喺下面揀返正確嘅想預訂商品；想預訂冇嘅會新增一張訂單。</p>
+    <div id="rcptList" class="cartPick"></div>
+    <div class="formBtns"><button type="button" id="rcptCancel">取消</button><span class="grow"></span><button type="submit" class="primary" value="ok" id="rcptGo">確認落單</button></div>
   </form>
 </dialog>
 
