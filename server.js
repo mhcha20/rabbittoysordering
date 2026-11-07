@@ -4,7 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { parseOrder, parseWish, answerQuestion, findOfficialPhotos } = require('./ai');
+const { parseOrder, parseWish, readReceipt, answerQuestion, findOfficialPhotos } = require('./ai');
 const { createTelegram } = require('./telegram');
 const { buildCart } = require('./cart');
 
@@ -239,6 +239,11 @@ const server = http.createServer(async (req, res) => {
       const found = await findOfficialPhotos({ name: body?.name, platform: body?.platform, orderUrl: body?.orderUrl });
       found.photos = (await keepLocalPhotos({ photos: found.photos })).photos;
       return send(res, 200, found);
+    }
+    if (p === '/api/ai/receipt' && req.method === 'POST') {
+      const body = await readBody(req);
+      const images = Array.isArray(body?.images) ? body.images.slice(0, 6) : [];
+      return send(res, 200, await readReceipt({ images, name: String(body?.name || '').slice(0, 300) }));
     }
     if (p === '/api/ai/parse' && req.method === 'POST') {
       const body = await readBody(req);

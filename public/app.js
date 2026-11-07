@@ -213,6 +213,7 @@ function renderThumbs() {
   $('#photoPreview').innerHTML = thumbs(editing.photos, 'photo');
   const shots = $('#shotPreview');
   if (shots) shots.innerHTML = thumbs(editing.orderShots, 'shot');
+  $('#shotRead').hidden = !editing.orderShots.length;
 }
 const blankItem = (kind = tab) => ({ id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6), kind, link: '', orderUrl: '', deadline: '', platform: '', orderNo: '', orderDate: '', name: '', qty: 1, currency: 'JPY', price: 0, shipping: 0, shipDate: '', delivery: '', status: kind === 'wish' ? '想買' : '已下單', notes: '', photos: [], orderShots: [] });
 function openEditor(it, { isNew = !it, title } = {}) {
@@ -225,6 +226,7 @@ function openEditor(it, { isNew = !it, title } = {}) {
   for (const k of ['name', 'platform', 'orderNo', 'orderDate', 'shipDate', 'qty', 'currency', 'price', 'shipping', 'status', 'delivery', 'notes', 'link', 'orderUrl', 'deadline', 'remindAt']) f[k].value = editing[k] ?? '';
   f.deadline.value = (editing.deadline || '').slice(0, 10);
   f.deadlineTime.value = (editing.deadline || '').slice(11, 16);
+  $('#shotStatus').hidden = true;
   renderThumbs();
   $('#dlg').showModal();
 }
@@ -267,11 +269,56 @@ $('#photoFile').onchange = async (e) => {
 };
 $('#shotFile').onchange = async (e) => {
   editing.orderShots = editing.orderShots || [];
+  const added = [];
   for (const file of e.target.files) {
-    try { editing.orderShots.push(await resizeImage(file)); } catch { alert('無法讀取圖片：' + file.name); }
+    try { const img = await resizeImage(file, 1800); editing.orderShots.push(img); added.push(img); } catch { alert('無法讀取圖片：' + file.name); }
   }
   e.target.value = ''; renderThumbs();
+  if (added.length) readShots();
 };
+$('#shotRead').onclick = () => readShots();
+
+// Read the order screenshots and fill in this item's order number, date and price.
+async function readShots() {
+  const target = editing;
+  const f = $('#form');
+  const st = $('#shotStatus'), btn = $('#shotRead');
+  const shots = (target.orderShots || []).slice(-6);
+  if (!shots.length) return;
+  st.hidden = false; st.className = 'shotStatus busy'; st.textContent = '🔍 讀緊截圖，大約 10–30 秒…';
+  btn.disabled = true;
+  try {
+    const images = await Promise.all(shots.map((p) => (String(p).startsWith('data:') ? p : toDataUrl(p))));
+    const r = await api('POST', '/api/ai/receipt', { images, name: f.name.value.trim() });
+    if (editing !== target || !$('#dlg').open) return; // editor moved on
+    const line = r.lines?.[r.match];
+    const filled = [];
+    const set = (k, v, label) => { if (v === '' || v == null) return; if (String(f[k].value) !== String(v)) { f[k].value = v; filled.push(label); } };
+    set('orderNo', r.orderNo, '訂單編號');
+    set('orderDate', /^\d{4}-\d{2}-\d{2}$/.test(r.orderDate) ? r.orderDate : '', '下單日期');
+    if (!f.platform.value.trim() || /等$|\//.test(f.platform.value)) set('platform', r.platform, '店舖');
+    if (line) {
+      set('currency', r.currency, '幣別');
+      set('price', line.price, '單價');
+      set('qty', line.qty || 1, '數量');
+    }
+    const n = r.lines?.length || 0;
+    if (r.shipping) {
+      if (n <= 1) set('shipping', r.shipping, '運費');
+      else if (!f.notes.value.includes('全單運費')) {
+        f.notes.value = (f.notes.value ? f.notes.value.trim() + '\n' : '') + `全單運費 ${fmt(r.currency, r.shipping)}（${n} 件一齊寄）`;
+        filled.push('備註（全單運費）');
+      }
+    }
+    st.className = 'shotStatus ' + (line ? 'ok' : 'warn');
+    st.textContent = (line ? `✅ 對到「${line.name}」` : '⚠️ 截圖入面搵唔到同名商品，只填咗訂單資料') +
+      (filled.length ? `，已填：${filled.join('、')}。請檢查後按儲存。` : '，資料同而家一樣。') + (r.summary ? `\n${r.summary}` : '');
+  } catch (err) {
+    let msg = err.message || String(err);
+    try { msg = JSON.parse(msg.replace(/^\d+ /, '')).error || msg; } catch { /* plain */ }
+    st.className = 'shotStatus warn'; st.textContent = '讀唔到截圖：' + msg;
+  } finally { btn.disabled = false; }
+}
 $('#photoFind').onclick = async () => {
   const f = $('#form');
   if (!f.name.value.trim()) { alert('請先填商品名稱'); return; }

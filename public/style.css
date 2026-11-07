@@ -200,3 +200,6 @@ button.small{padding:6px 12px;font-size:14px;border-radius:999px}
   #cartDlg{width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:none;margin:0;border-radius:0}
   #cartDlg .cartForm{height:100%;max-height:none}
 }
+.shotStatus{margin:8px 0 0;padding:8px 12px;border-radius:10px;font-size:13.5px;white-space:pre-line;background:var(--bg);border:1px solid var(--line)}
+.shotStatus.ok{border-color:var(--ok)}
+.shotStatus.warn{border-color:var(--warn)}

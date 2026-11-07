@@ -62,10 +62,12 @@
       </div>
     </div>
     <div class="photos orderOnly">
-      <p class="shotLabel">訂單截圖（只放呢度，唔會出現喺商品卡）</p>
+      <p class="shotLabel">訂單截圖（只放呢度，唔會出現喺商品卡）：上載後會自動讀訂單編號、日期同價錢</p>
       <div id="shotPreview" class="thumbs"></div>
+      <p id="shotStatus" class="shotStatus" hidden></p>
       <div class="photoBtns">
         <label class="btn">🧾 上傳訂單截圖<input type="file" id="shotFile" accept="image/*" multiple hidden></label>
+        <button type="button" id="shotRead" hidden>🔍 由截圖讀資料</button>
       </div>
     </div>
     <label class="wide">商品名稱<input name="name" required></label>

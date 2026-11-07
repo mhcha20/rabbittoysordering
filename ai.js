@@ -140,7 +140,7 @@ async function toDataUrl(url) {
   } catch { return null; }
 }
 
-async function runClaude({ system, schema, content }) {
+async function runClaude({ system, schema, content, web = true, raw = false }) {
   const anthropic = getClient();
   const messages = [{ role: 'user', content }];
   let response;
@@ -150,12 +150,12 @@ async function runClaude({ system, schema, content }) {
       max_tokens: 64000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: resultSchema(schema) } },
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: raw ? schema : resultSchema(schema) } },
       system,
-      tools: [
+      ...(web ? { tools: [
         { type: 'web_search_20260209', name: 'web_search', max_uses: 12 },
         { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 20 },
-      ],
+      ] } : {}),
       messages,
     }).finalMessage();
     if (response.stop_reason !== 'pause_turn') break;
@@ -279,7 +279,7 @@ async function callXai({ instructions, input, schema, effort, maxOutput, search 
   };
   if (search) body.tools = [{ type: 'web_search', enable_image_search: true, enable_image_understanding: true }];
   if (schema) {
-    body.text = { format: { type: 'json_schema', name: 'parse_result', schema: resultSchema(schema), strict: true } };
+    body.text = { format: { type: 'json_schema', name: 'parse_result', schema, strict: true } };
   }
   const r = await fetch('https://api.x.ai/v1/responses', {
     method: 'POST',
@@ -296,22 +296,23 @@ async function callXai({ instructions, input, schema, effort, maxOutput, search 
   try { return JSON.parse(raw); } catch { throw fail(502, 'xAI 回覆唔係 JSON。'); }
 }
 
-async function runGrok({ system, schema, content }) {
-  const instructions = system + '\n\nYou are the backup model because Anthropic credits are exhausted. Use web search and open the official product page. photoUrls must be direct photographs of the product itself (shop CDN, official page, or image-search results). Never use the user\'s order screenshot, a receipt, a logo, or an icon. Never invent a URL.';
+async function runGrok({ system, schema: itemSchema, content, web = true, raw = false }) {
+  const schema = raw ? itemSchema : resultSchema(itemSchema);
+  const instructions = system + (web ? '\n\nYou are the backup model because Anthropic credits are exhausted. Use web search and open the official product page. photoUrls must be direct photographs of the product itself (shop CDN, official page, or image-search results). Never use the user\'s order screenshot, a receipt, a logo, or an icon. Never invent a URL.' : '');
   const input = [{ role: 'user', content: xaiInput(content) }];
   let data;
   try {
-    data = await callXai({ instructions, input, schema, effort: 'medium', maxOutput: 8000, search: true });
+    data = await callXai({ instructions, input, schema, effort: 'medium', maxOutput: 8000, search: web });
   } catch (err) {
     if (err.upstream !== 400) throw err;
     console.error('xAI rejected structured output, retrying as plain JSON');
     data = await callXai({
-      instructions: instructions + '\nReturn one JSON object only, no markdown, matching this schema:\n' + JSON.stringify(resultSchema(schema)),
-      input, schema: null, effort: 'medium', maxOutput: 8000, search: true,
+      instructions: instructions + '\nReturn one JSON object only, no markdown, matching this schema:\n' + JSON.stringify(schema),
+      input, schema: null, effort: 'medium', maxOutput: 8000, search: web,
     });
   }
   const result = parseJsonLoose(extractOutputText(data));
-  if (!Array.isArray(result.items)) throw fail(502, 'xAI 回覆缺少商品資料。');
+  if (!raw && !Array.isArray(result.items)) throw fail(502, 'xAI 回覆缺少商品資料。');
   result.summary = '（Anthropic 餘額用晒，已改用 xAI）' + (result.summary || '');
   return result;
 }
@@ -375,10 +376,10 @@ async function searchOfficialPhotos(items) {
     data = await callXai({
       instructions: 'Find the official product photo for each numbered item. Use web search. Return JSON only, matching the schema. urls must be direct https image files of that exact product from the shop or maker. Never return an order-page screenshot, a logo, an icon, or a URL you did not see.',
       input: lines,
-      schema: {
+      schema: resultSchema({
         type: 'object', additionalProperties: false, required: ['n', 'urls'],
         properties: { n: { type: 'integer' }, urls: { type: 'array', items: { type: 'string' } } },
-      },
+      }),
       effort: 'low', maxOutput: 2000, search: true,
     });
   } catch (e) {
@@ -428,6 +429,38 @@ async function parseOrder({ images, hint }) {
   const result = await ensureOfficialPhotos(await checkPhotos(await runAI({ system: SYSTEM, schema: ITEM_SCHEMA, content })));
   for (const item of result.items) item.kind = 'order';
   return result;
+}
+
+// Read one receipt / order screenshot (no web lookups) so the editor can fill in the item being edited.
+const RECEIPT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['platform', 'orderNo', 'orderDate', 'currency', 'shipping', 'lines', 'match', 'summary'],
+  properties: {
+    platform: { type: 'string', description: 'Shop name as shown, empty if not shown' },
+    orderNo: { type: 'string', description: 'Order number copied exactly, character by character, including any prefix such as # or CHIIKAWA-' },
+    orderDate: { type: 'string', description: 'YYYY-MM-DD, or empty' },
+    currency: { type: 'string', enum: CURRENCIES },
+    shipping: { type: 'number', description: 'Shipping for the whole order, 0 if none or not shown' },
+    lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'qty', 'price'], properties: {
+      name: { type: 'string', description: 'Product name exactly as shown' },
+      qty: { type: 'integer' },
+      price: { type: 'number', description: 'Unit price (line total divided by qty)' },
+    } } },
+    match: { type: 'integer', description: 'Index in lines of the product the user is editing, or -1 if none matches' },
+    summary: { type: 'string', description: 'One short sentence in Cantonese (Traditional Chinese): what matched and anything to double-check' },
+  },
+};
+const RECEIPT_SYSTEM = `You read order confirmations and receipts for a Hong Kong collector of Japanese character goods.
+Copy order numbers and prices exactly as printed; never guess. A screenshot set may show the same order in several views: list each product once.
+The user is editing one product; pick the line that is the same product. Japanese names can differ slightly (brackets, spaces, version names such as 悪いバージョン); the version or variant must match.`;
+
+async function readReceipt({ images, name }) {
+  const content = imageBlocks(images);
+  if (!content.length) throw fail(400, '請上傳至少一張截圖');
+  content.push({ type: 'text', text: `今日日期：${new Date().toISOString().slice(0, 10)}。\n用戶而家編輯緊嘅商品：${name || '（未填名）'}` });
+  const out = await runAI({ system: RECEIPT_SYSTEM, schema: RECEIPT_SCHEMA, content, web: false, raw: true });
+  return out;
 }
 
 async function parseWish({ link, images, hint }) {
@@ -509,4 +542,4 @@ async function answerQuestion(question, items) {
   return '（已改用 xAI）' + await answerWithGrok(question, records, now);
 }
 
-module.exports = { parseOrder, parseWish, answerQuestion, findOfficialPhotos };
+module.exports = { parseOrder, parseWish, readReceipt, answerQuestion, findOfficialPhotos };
