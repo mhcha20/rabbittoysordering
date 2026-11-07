@@ -105,4 +105,53 @@ async function buildCart(lines) {
   return { items, carts };
 }
 
-module.exports = { buildCart, parseLink };
+// Same series, other characters: shops like ちいかわマーケット list each character as its own product,
+// e.g. 「… Christmas（ちいかわ）」「…（ハチワレ）」「…（うさぎ）」. Find them by the title without the last bracket.
+const seriesBase = (t) => String(t || '').replace(/\s*[（(][^（）()]*[）)]\s*$/, '').trim();
+
+async function findSiblings(url) {
+  const p = parseLink(url);
+  if (!p) return { items: [] };
+  const self = await productJs(p.origin, p.handle).catch(() => null) || await productPage(p.origin, p.path, p.handle).catch(() => null);
+  if (!self) return { items: [] };
+  const base = seriesBase(self.title);
+  if (!base || base === self.title) return { base, items: [] }; // no character bracket: nothing to look for
+  const prefix = (p.path.match(/^\/([a-z]{2}(?:-[a-z]+)?)\/(?:collections|products)\//i) || [])[1];
+  const link = (h) => `${p.origin}${prefix ? '/' + prefix : ''}/products/${h}`;
+  const found = new Map(); // handle -> {title,image,price,available}
+  // 1. the collection in the link, which already carries Japanese titles
+  const col = (p.path.match(/\/collections\/([^/]+)\//) || [])[1];
+  if (col) {
+    for (let page = 1; page <= 4; page++) {
+      const r = await get(`${p.origin}/collections/${col}/products.json?limit=250&page=${page}`, 'application/json').catch(() => null);
+      if (!r?.ok) break;
+      const list = (await r.json()).products || [];
+      for (const x of list) {
+        if (seriesBase(x.title) !== base) continue;
+        const v = x.variants?.[0] || {};
+        found.set(x.handle, { title: x.title, image: x.images?.[0]?.src || '', price: Number(v.price) || null, available: !!v.available });
+      }
+      if (list.length < 250) break;
+    }
+  }
+  // 2. the shop's search (only the English storefront answers it); confirm each hit by its Japanese title
+  const q = encodeURIComponent(base.replace(/^ちいかわ\s*/, ''));
+  const r = await get(`${p.origin}/en/search/suggest.json?q=${q}&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=show`, 'application/json').catch(() => null);
+  if (r?.ok) {
+    const hits = ((await r.json()).resources?.results?.products || []).map((x) => x.handle).filter((h) => !found.has(h));
+    await Promise.all(hits.map(async (h) => {
+      const x = await productJs(p.origin, h).catch(() => null);
+      if (x && seriesBase(x.title) === base) {
+        const v = x.variants[0] || {};
+        found.set(h, { title: x.title, image: x.image, price: v.price, available: v.available });
+      }
+    }));
+  }
+  const v0 = self.variants[0] || {};
+  found.set(p.handle, { title: self.title, image: self.image, price: v0.price, available: v0.available });
+  const items = [...found.entries()].map(([h, x]) => ({ ...x, image: fixImg(x.image), url: h === p.handle ? url : link(h), self: h === p.handle }))
+    .sort((a, b) => (b.self - a.self) || a.title.localeCompare(b.title, 'ja'));
+  return { base, items: items.length > 1 ? items : [] };
+}
+
+module.exports = { buildCart, parseLink, findSiblings };

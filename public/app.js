@@ -472,14 +472,69 @@ $('#linkForm').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'ok') return;
   const f = $('#linkForm');
   const link = f.link.value.trim(), hint = f.hint.value.trim(), files = [...f.shots.files].slice(0, 4);
+  const sib = await pickSiblings(link); // other characters of the same series, if the user wants them
   $('#aiBusy').showModal();
   try {
     const images = await Promise.all(files.map((x) => resizeImage(x, 1600)));
     const result = await api('POST', '/api/ai/link', { link, images, hint });
     $('#aiBusy').close();
+    if (sib.picked.length) addSiblingDrafts(result, link, sib);
     startDrafts(result, images);
   } catch (err) { aiError(err); }
 });
+
+// ---------- same series, other characters (each is its own product page) ----------
+const lastBracket = (t) => (String(t || '').match(/[（(]([^（）()]*)[）)]\s*$/) || [])[1] || '';
+async function pickSiblings(link) {
+  const none = { picked: [], self: null };
+  if (!/^https:\/\/[^/]+\/.*products\/[^/?#]+/.test(link)) return none;
+  const busyTxt = $('#aiBusy').querySelector('b'); const old = busyTxt.textContent;
+  busyTxt.textContent = '睇緊同系列仲有冇其他款…';
+  $('#aiBusy').showModal();
+  let r;
+  try { r = await api('POST', '/api/shop/siblings', { url: link }); } catch { r = { items: [] }; }
+  $('#aiBusy').close(); busyTxt.textContent = old;
+  if (!r.items?.length) return none;
+  const self = r.items.find((x) => x.self);
+  $('#sibList').innerHTML = r.items.map((x, i) => `
+    <div class="cartRow"><label class="cartTap"><input type="checkbox" data-sib="${i}" checked ${x.self ? 'disabled' : ''}>
+      ${x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy">` : '<span class="noimg">🐰</span>'}
+      <span class="cartName">${esc(x.title)}<small>${x.price ? fmt('JPY', x.price) : ''}${x.self ? ' ・ 你貼嘅連結' : ''}${x.available ? '' : ' ・ 而家未有貨'}</small></span>
+    </label></div>`).join('');
+  const count = () => { $('#sibGo').textContent = `加入 ${document.querySelectorAll('#sibList [data-sib]:checked').length} 款`; };
+  count();
+  $('#sibList').onchange = count;
+  $('#sibDlg').showModal();
+  return new Promise((resolve) => {
+    const done = (all) => {
+      $('#sibDlg').close();
+      const picked = all ? [...document.querySelectorAll('#sibList [data-sib]:checked')].map((c) => r.items[+c.dataset.sib]).filter((x) => !x.self) : [];
+      resolve({ picked, self });
+    };
+    $('#sibGo').onclick = (ev) => { ev.preventDefault(); done(true); };
+    $('#sibOnly').onclick = $('#sibX').onclick = () => done(false);
+    $('#sibDlg').oncancel = () => done(false);
+  });
+}
+function addSiblingDrafts(result, link, { picked, self }) {
+  const tpl = result.items[0] || { ...blankItem('wish'), name: self.title, platform: 'ちいかわマーケット' };
+  if (!result.items.length) result.items.push(tpl);
+  if (!tpl.orderUrl) tpl.orderUrl = link;
+  const jp = /\.jp$/i.test(new URL(link).hostname);
+  const selfChar = lastBracket(self.title);
+  for (const s of picked) {
+    const sChar = lastBracket(s.title);
+    let name = s.title;
+    if (tpl.name.includes(self.title)) name = tpl.name.replace(self.title, s.title);
+    else if (selfChar && sChar && /[（(]/.test(tpl.name) && tpl.name.includes(selfChar)) name = tpl.name.replace(selfChar, sChar);
+    result.items.push({
+      ...tpl, name, orderUrl: s.url, photos: s.image ? [s.image] : [],
+      price: s.price ?? tpl.price, currency: jp && s.price ? 'JPY' : tpl.currency,
+      notes: [tpl.notes, `同系列另一款（由「${self.title}」嗰條連結搵到）`].filter(Boolean).join('\n'),
+    });
+  }
+  result.summary = `${result.summary || ''}\n另外加咗同系列 ${picked.length} 款，會逐件打開俾你檢查。`.trim();
+}
 // ---------- buy all at once (Shopify cart link) ----------
 const isProductUrl = (u) => /^https:\/\/[^/]+\/.*products\/[^/?#]+/.test(u || '');
 const cartChecked = () => [...document.querySelectorAll('#cartPick [data-cart]:checked')];
