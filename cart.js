@@ -26,7 +26,7 @@ async function productJs(origin, handle) {
   if (!r.ok) throw new Error(`店舖回覆 ${r.status}（可能唔係 Shopify 商店）`);
   const prod = await r.json();
   return {
-    title: prod.title,
+    title: prod.title, tags: prod.tags || [],
     image: prod.featured_image || (prod.images || [])[0] || '',
     variants: (prod.variants || []).map((v) => ({
       id: v.id, title: v.title, available: !!v.available,
@@ -109,49 +109,74 @@ async function buildCart(lines) {
 // e.g. 「… Christmas（ちいかわ）」「…（ハチワレ）」「…（うさぎ）」. Find them by the title without the last bracket.
 const seriesBase = (t) => String(t || '').replace(/\s*[（(][^（）()]*[）)]\s*$/, '').trim();
 
+// Longest run of characters two names share, e.g. 「 ボンボンドロップシール ジュエル」.
+function commonRun(a, b) {
+  let best = 0; const prev = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = 0;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = a[i - 1] === b[j - 1] ? diag + 1 : 0;
+      if (prev[j] > best) best = prev[j];
+      diag = tmp;
+    }
+  }
+  return best;
+}
+const core = (t) => seriesBase(t).replace(/^ちいかわ\s*/, '');
+
 async function findSiblings(url) {
   const p = parseLink(url);
   if (!p) return { items: [] };
   const self = await productJs(p.origin, p.handle).catch(() => null) || await productPage(p.origin, p.path, p.handle).catch(() => null);
   if (!self) return { items: [] };
   const base = seriesBase(self.title);
-  if (!base || base === self.title) return { base, items: [] }; // no character bracket: nothing to look for
+  const hasBracket = base !== self.title;
   const prefix = (p.path.match(/^\/([a-z]{2}(?:-[a-z]+)?)\/(?:collections|products)\//i) || [])[1];
   const link = (h) => `${p.origin}${prefix ? '/' + prefix : ''}/products/${h}`;
-  const found = new Map(); // handle -> {title,image,price,available}
-  // 1. the collection in the link, which already carries Japanese titles
-  const col = (p.path.match(/\/collections\/([^/]+)\//) || [])[1];
+  const found = new Map(); // handle -> {title,image,price,available,related}
+  const selfCore = core(self.title);
+  const minRun = Math.max(6, Math.ceil(selfCore.length * 0.4));
+  // 1. the release the product belongs to (the collection in the link, or a date tag such as 20261106)
+  const col = (p.path.match(/\/collections\/([^/]+)\//) || [])[1] || (self.tags || []).find((t) => /^\d{8}$/.test(t));
   if (col) {
     for (let page = 1; page <= 4; page++) {
-      const r = await get(`${p.origin}/collections/${col}/products.json?limit=250&page=${page}`, 'application/json').catch(() => null);
+      const r = await get(`${p.origin}/collections/${encodeURIComponent(col)}/products.json?limit=250&page=${page}`, 'application/json').catch(() => null);
       if (!r?.ok) break;
       const list = (await r.json()).products || [];
       for (const x of list) {
-        if (seriesBase(x.title) !== base) continue;
+        if (x.handle === p.handle) continue;
+        const same = hasBracket && seriesBase(x.title) === base;
+        // a similar name in the same release, e.g. 超まじかる… / てんし♡あくま… ボンボンドロップシール ジュエル
+        const related = !same && commonRun(selfCore, core(x.title)) >= minRun;
+        if (!same && !related) continue;
         const v = x.variants?.[0] || {};
-        found.set(x.handle, { title: x.title, image: x.images?.[0]?.src || '', price: Number(v.price) || null, available: !!v.available });
+        found.set(x.handle, { title: x.title, image: x.images?.[0]?.src || '', price: Number(v.price) || null, available: !!v.available, related });
       }
       if (list.length < 250) break;
     }
   }
-  // 2. the shop's search (only the English storefront answers it); confirm each hit by its Japanese title
-  const q = encodeURIComponent(base.replace(/^ちいかわ\s*/, ''));
-  const r = await get(`${p.origin}/en/search/suggest.json?q=${q}&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=show`, 'application/json').catch(() => null);
-  if (r?.ok) {
-    const hits = ((await r.json()).resources?.results?.products || []).map((x) => x.handle).filter((h) => !found.has(h));
-    await Promise.all(hits.map(async (h) => {
-      const x = await productJs(p.origin, h).catch(() => null);
-      if (x && seriesBase(x.title) === base) {
-        const v = x.variants[0] || {};
-        found.set(h, { title: x.title, image: x.image, price: v.price, available: v.available });
-      }
-    }));
+  // 2. the shop's search (only the English storefront answers it): same name apart from the last bracket only
+  if (hasBracket) {
+    const q = encodeURIComponent(base.replace(/^ちいかわ\s*/, ''));
+    const r = await get(`${p.origin}/en/search/suggest.json?q=${q}&resources[type]=product&resources[limit]=10&resources[options][unavailable_products]=show`, 'application/json').catch(() => null);
+    if (r?.ok) {
+      const hits = ((await r.json()).resources?.results?.products || []).map((x) => x.handle).filter((h) => h !== p.handle && !found.has(h));
+      await Promise.all(hits.map(async (h) => {
+        const x = await productJs(p.origin, h).catch(() => null);
+        if (x && seriesBase(x.title) === base) {
+          const v = x.variants[0] || {};
+          found.set(h, { title: x.title, image: x.image, price: v.price, available: v.available, related: false });
+        }
+      }));
+    }
   }
+  if (!found.size) return { base, items: [] };
   const v0 = self.variants[0] || {};
-  found.set(p.handle, { title: self.title, image: self.image, price: v0.price, available: v0.available });
+  found.set(p.handle, { title: self.title, image: self.image, price: v0.price, available: v0.available, related: false });
   const items = [...found.entries()].map(([h, x]) => ({ ...x, image: fixImg(x.image), url: h === p.handle ? url : link(h), self: h === p.handle }))
-    .sort((a, b) => (b.self - a.self) || a.title.localeCompare(b.title, 'ja'));
-  return { base, items: items.length > 1 ? items : [] };
+    .sort((a, b) => (b.self - a.self) || (a.related - b.related) || a.title.localeCompare(b.title, 'ja'));
+  return { base, items };
 }
 
 module.exports = { buildCart, parseLink, findSiblings };

@@ -206,3 +206,5 @@ button.small{padding:6px 12px;font-size:14px;border-radius:999px}
 .rcptRow{flex-wrap:wrap}
 #rcptDlg .rcptRow select{flex:0 0 auto;margin:2px 0 2px 36px;width:calc(100% - 36px);min-width:0;font-size:14px;text-overflow:ellipsis}
 .rcptInfo b{font-size:15px}
+.sibHead{margin:8px 0 0;font-size:13px;font-weight:600;color:var(--muted)}
+#sibDlg .cartName{-webkit-line-clamp:5}

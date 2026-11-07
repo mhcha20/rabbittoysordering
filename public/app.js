@@ -496,8 +496,9 @@ async function pickSiblings(link) {
   $('#aiBusy').close(); busyTxt.textContent = old;
   if (!r.items?.length) return none;
   const self = r.items.find((x) => x.self);
-  $('#sibList').innerHTML = r.items.map((x, i) => `
-    <div class="cartRow"><label class="cartTap"><input type="checkbox" data-sib="${i}" checked ${x.self ? 'disabled' : ''}>
+  const firstRel = r.items.findIndex((x) => x.related);
+  $('#sibList').innerHTML = r.items.map((x, i) => `${i === firstRel ? '<p class="sibHead">同一批新品入面名好似嘅（可能同系列，想要先剔）</p>' : ''}
+    <div class="cartRow"><label class="cartTap"><input type="checkbox" data-sib="${i}" ${x.related ? '' : 'checked'} ${x.self ? 'disabled' : ''}>
       ${x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy">` : '<span class="noimg">🐰</span>'}
       <span class="cartName">${esc(x.title)}<small>${x.price ? fmt('JPY', x.price) : ''}${x.self ? ' ・ 你貼嘅連結' : ''}${x.available ? '' : ' ・ 而家未有貨'}</small></span>
     </label></div>`).join('');
