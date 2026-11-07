@@ -1,6 +1,7 @@
 (() => {
 const STATUSES = ['待確認', '已下單', '已確認', '已發貨', '已收貨', '已取消'];
-const WISH_STATUSES = ['想買', '已放棄'];
+const WISH_STATUSES = ['想買', '搶唔到', '已放棄'];
+const INACTIVE = ['已取消', '已放棄', '搶唔到']; // hidden from the main list unless asked for
 const statusesFor = (kind) => (kind === 'wish' ? WISH_STATUSES : STATUSES);
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -81,7 +82,23 @@ function deadlineText(it) {
 const remindText = (it) => (it.remindAt ? `<div class="meta remind">⏰ 提醒：${esc(it.remindAt.slice(5, 10).replace('-', '/'))} ${esc(it.remindAt.slice(11))}（香港時間）</div>` : '');
 const postLink = (it) => (it.link ? `<a class="postlink" href="${esc(it.link)}" target="_blank" rel="noopener">🔗 原帖</a>` : '');
 const shopLink = (it) => (it.orderUrl ? `<a class="postlink shop" href="${esc(it.orderUrl)}" target="_blank" rel="noopener">🛒 預訂頁</a>` : '');
-const orderedBtn = (it) => (it.status === '已放棄' ? '' : `<button type="button" class="ordered" data-ordered="${esc(it.id)}" title="已經落咗單，轉去我的訂單">✓ 已落單</button>`);
+const orderedBtn = (it) => (it.status === '已放棄' ? ''
+  : it.status === '搶唔到' ? `<span class="wishBtns"><button type="button" class="ordered" data-failed="${esc(it.id)}" title="改返做想買">↺ 改返想買</button></span>`
+  : `<span class="wishBtns"><button type="button" class="ordered" data-ordered="${esc(it.id)}" title="已經落咗單，轉去我的訂單">✓ 已落單</button><button type="button" class="ordered failBtn" data-failed="${esc(it.id)}" title="預訂失敗，搶唔到">✗ 搶唔到</button></span>`);
+async function toggleFailed(id) {
+  const it = items.find((x) => x.id === id);
+  if (!it) return;
+  const name = it.name.length > 40 ? it.name.slice(0, 40) + '…' : it.name;
+  const failed = it.status === '搶唔到';
+  if (!confirm(failed ? `將「${name}」改返做想買？` : `「${name}」搶唔到？\n會收埋喺「搶唔到」，之後可以撳「搶唔到」統計睇返。`)) return;
+  const draft = failed ? { ...it, status: '想買', failedAt: '' } : { ...it, status: '搶唔到', failedAt: hkToday() };
+  Object.assign(it, draft); render();
+  busy = true;
+  try {
+    const { item } = await api('PUT', '/api/items/' + encodeURIComponent(id), draft);
+    Object.assign(it, item); render();
+  } catch (e) { showError(e); refresh(); } finally { busy = false; }
+}
 function convertToOrder(id) {
   const it = items.find((x) => x.id === id);
   if (!it || !confirm(`已經落咗「${it.name.slice(0, 40)}」嘅單？\n會轉去「我的訂單」，請補返訂單編號等資料。`)) return;
@@ -111,7 +128,7 @@ function filtered() {
   const showC = $('#showCancelled').checked;
   const pending = (it) => it.status !== '已收貨' && it.status !== '已取消';
   let list = items.filter((it) => kindOf(it) === tab &&
-    (showC || (it.status !== '已取消' && it.status !== '已放棄')) &&
+    (showC || s === it.status || !INACTIVE.includes(it.status)) &&
     (!p || it.platform === p) && (!pk || pickupKey(it.delivery) === pk) && (!s || (s === '__pending' ? pending(it) : it.status === s)) && (!c || it.currency === c) &&
     (!q || [it.name, it.orderNo, it.notes, it.platform, it.delivery, it.link, it.orderUrl].join(' ').toLowerCase().includes(q)));
   const dl = (it) => (it.deadline ? it.deadline.slice(0, 10) + 'T' + (it.deadline.slice(11, 16) || '23:59') : '9999');
@@ -125,7 +142,7 @@ function filtered() {
 }
 
 function renderSummary() {
-  const wishes = items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄');
+  const wishes = items.filter((i) => kindOf(i) === 'wish' && i.status === '想買');
   $('#wishCount').textContent = wishes.length || '';
   if (tab === 'wish') {
     const sums = {};
@@ -135,7 +152,8 @@ function renderSummary() {
       <div class="stat"><small>想預訂款數</small><b>${wishes.length}</b></div>
       <div class="stat"><small>7 日內截止</small><b>${soon}</b></div>
       <div class="stat"><small>預算（官方價）</small><b>${Object.entries(sums).map(([c, n]) => fmt(c, n)).join('<br>') || '—'}</b></div>
-      <div class="stat"><small>已放棄款數</small><b>${items.filter((i) => kindOf(i) === 'wish' && i.status === '已放棄').length}</b></div>`;
+      <button type="button" class="stat statBtn ${$('#fStatus').value === '搶唔到' ? 'on' : ''}" data-showstatus="搶唔到"><small>😢 搶唔到（撳嚟睇）</small><b>${items.filter((i) => kindOf(i) === 'wish' && i.status === '搶唔到').length}</b></button>
+      <button type="button" class="stat statBtn ${$('#fStatus').value === '已放棄' ? 'on' : ''}" data-showstatus="已放棄"><small>已放棄（撳嚟睇）</small><b>${items.filter((i) => kindOf(i) === 'wish' && i.status === '已放棄').length}</b></button>`;
     return;
   }
   const live = items.filter((i) => kindOf(i) === 'order' && i.status !== '已取消');
@@ -162,7 +180,7 @@ function render() {
   el.className = view === 'grid' ? 'grid' : '';
   if (view === 'grid') {
     el.innerHTML = list.map((it) => `
-      <article class="card ${it.status === '已取消' ? 'cancelled' : ''} ${it.status === '已收貨' ? 'received' : ''} ${it.status === '已放棄' ? 'dropped' : ''}" data-id="${esc(it.id)}">
+      <article class="card ${it.status === '已取消' ? 'cancelled' : ''} ${it.status === '已收貨' ? 'received' : ''} ${it.status === '已放棄' ? 'dropped' : ''} ${it.status === '搶唔到' ? 'failed' : ''}" data-id="${esc(it.id)}">
         <div class="pic">${it.photos.length ? `<div class="slides">${it.photos.map((src) => `<img src="${esc(src)}" alt="">`).join('')}</div>` : '尚無照片'}
           ${it.photos.length > 1 ? `<button type="button" class="nav prev" data-slide="-1" aria-label="上一張">‹</button><button type="button" class="nav next" data-slide="1" aria-label="下一張">›</button><span class="cnt">1 / ${it.photos.length}</span>` : ''}</div>
         <div class="body">
@@ -171,7 +189,7 @@ function render() {
           <h3>${esc(it.name)}</h3>
           <div class="meta">${esc(it.platform)}</div>
           <div class="meta">${deadlineText(it)}</div>
-          ${remindText(it)}
+          ${it.status === '搶唔到' ? `<div class="meta failNote">😢 ${it.failedAt ? esc(shortDate(it.failedAt)) + ' ' : ''}搶唔到</div>` : remindText(it)}
           <div class="meta">預計發售：${esc(it.shipDate || '—')}</div>
           <div class="price">${it.price ? fmt(it.currency, it.price) : '價錢未知'}</div>
           <div class="links">${shopLink(it)}${postLink(it)}</div>` : `
@@ -376,6 +394,8 @@ $('#list').onclick = (e) => {
     return;
   }
   if (e.target.closest('a')) return; // links open in a new tab, not the editor
+  const fb = e.target.closest('[data-failed]');
+  if (fb) { e.stopPropagation(); toggleFailed(fb.dataset.failed); return; }
   const ob = e.target.closest('[data-ordered]');
   if (ob) { e.stopPropagation(); convertToOrder(ob.dataset.ordered); return; }
   const rb = e.target.closest('[data-recv]');
@@ -412,12 +432,20 @@ function setTab(t) {
   $('#fPickup').hidden = t === 'wish';
   $('#fStatus').innerHTML = '<option value="">全部狀態</option>' +
     (t === 'order' ? '<option value="__pending">未收貨（全部）</option>' : '') + statusesFor(t).map((s) => `<option>${s}</option>`).join('');
-  $('#showCancelled').parentElement.lastChild.textContent = t === 'wish' ? ' 顯示已放棄' : ' 顯示已取消';
+  $('#showCancelled').parentElement.lastChild.textContent = t === 'wish' ? ' 顯示搶唔到／已放棄' : ' 顯示已取消';
   $('#fPlatform').value = ''; $('#fPickup').value = '';
   render();
 }
 document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => setTab(b.dataset.tab));
 // photo carousel: keep the "n / total" counter in step with swiping (scroll events don't bubble, so capture)
+$('#summary').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-showstatus]');
+  if (!b) return;
+  const st = b.dataset.showstatus;
+  $('#fStatus').value = $('#fStatus').value === st ? '' : st;
+  render();
+  $('#list').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 $('#list').addEventListener('scroll', (e) => {
   const box = e.target;
   if (!box.classList?.contains('slides')) return;
@@ -546,7 +574,7 @@ function cartCount() {
   $('#cartAll').textContent = boxes.length && cartChecked().length === boxes.length ? '全部唔揀' : '全選';
 }
 $('#btnCart').onclick = () => {
-  const wishes = items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄' && isProductUrl(i.orderUrl));
+  const wishes = items.filter((i) => kindOf(i) === 'wish' && i.status === '想買' && isProductUrl(i.orderUrl));
   $('#cartPickHead').hidden = !wishes.length;
   $('#cartPick').innerHTML = wishes.length ? wishes.map((i) => cartRowHtml(i)).join('')
     : '<p class="meta" id="cartNone">想預訂入面未有 ちいかわマーケット 呢類商品連結。喺下面貼連結撳「＋ 加入」就得。</p>';
@@ -656,7 +684,7 @@ $('#cartResult').addEventListener('click', async (e) => {
 
 // ---------- one receipt -> several wishlist items become orders ----------
 let rcpt = null; // { r, images }
-const liveWishes = () => items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄');
+const liveWishes = () => items.filter((i) => kindOf(i) === 'wish' && i.status !== '已放棄');  // 搶唔到 included: a receipt may prove it was bought after all
 $('#receiptFile').onchange = async (e) => {
   const files = [...e.target.files].slice(0, 6); e.target.value = '';
   if (!files.length) return;

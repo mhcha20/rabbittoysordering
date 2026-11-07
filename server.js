@@ -173,6 +173,7 @@ function cleanItem(raw) {
     name: s(raw.name), qty: Math.max(1, Number(raw.qty) || 1), currency: CURRENCIES.includes(raw.currency) ? raw.currency : 'JPY',
     price: Number(raw.price) || 0, shipping: Number(raw.shipping) || 0, shipDate: s(raw.shipDate), delivery: s(raw.delivery),
     status: s(raw.status) || '已下單', notes: s(raw.notes), photos: raw.photos, orderShots: raw.orderShots,
+    failedAt: /^\d{4}-\d{2}-\d{2}$/.test(s(raw.failedAt)) ? s(raw.failedAt) : '',
     ...receivedFields(raw),
   });
 }

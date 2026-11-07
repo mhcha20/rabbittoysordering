@@ -120,7 +120,7 @@ td .recv{margin-top:4px}
 .tabs button{flex:1;font-size:16px;padding:10px;border-radius:12px}
 .tabs button.on{background:var(--pink);border-color:var(--pink);color:#fff}
 .pill{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:rgba(0,0,0,.12);font-size:13px}
-.s-想買{background:#e76fa8}.s-已放棄{background:#999}
+.s-想買{background:#e76fa8}.s-已放棄{background:#999}.s-搶唔到{background:#b0566b}
 .card.dropped{opacity:.55}
 .deadline.soon{color:var(--bad);font-weight:700}
 .deadline.over{color:var(--muted);text-decoration:line-through}
@@ -208,3 +208,10 @@ button.small{padding:6px 12px;font-size:14px;border-radius:999px}
 .rcptInfo b{font-size:15px}
 .sibHead{margin:8px 0 0;font-size:13px;font-weight:600;color:var(--muted)}
 #sibDlg .cartName{-webkit-line-clamp:5}
+.wishBtns{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.failBtn{color:var(--muted)}
+.card.failed{opacity:.75}
+.card.failed .pic{filter:grayscale(.6)}
+button.statBtn{text-align:left;font:inherit;color:inherit;cursor:pointer}
+button.statBtn.on{border-color:var(--pink);box-shadow:0 0 0 2px var(--pink) inset}
+.failNote{color:#b0566b;font-weight:600}

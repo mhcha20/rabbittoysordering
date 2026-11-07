@@ -35,7 +35,7 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
   }
 
   // ---------- answering messages ----------
-  const live = () => getItems().filter((it) => !['已取消', '已放棄', '已收貨'].includes(it.status));
+  const live = () => getItems().filter((it) => !['已取消', '已放棄', '搶唔到', '已收貨'].includes(it.status));
   // When does the user next need to act on a wishlist item? (remind time, else deadline at 23:59)
   function nextAction(it) {
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(it.remindAt || '')) return { at: hkTimeToMs(it.remindAt), label: `⏰ ${it.remindAt.slice(5, 10).replace('-', '/')} ${it.remindAt.slice(11)}` };
@@ -142,7 +142,7 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
   async function check() {
     if (!state.chatId) return;
     const now = Date.now();
-    const items = getItems().filter((it) => it.status !== '已取消' && it.status !== '已放棄' && it.status !== '已收貨');
+    const items = getItems().filter((it) => !['已取消', '已放棄', '搶唔到', '已收貨'].includes(it.status));
     const due = { soon: [], now: [], tomorrow: [], closing: [] };
     for (const it of items) {
       if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(it.remindAt || '')) {

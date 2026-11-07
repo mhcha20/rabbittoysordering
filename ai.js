@@ -497,7 +497,7 @@ async function parseWish({ link, images, hint }) {
 // Answer a free-text question from Telegram using the user's own records.
 const QA_SYSTEM = `You answer questions on Telegram about a Hong Kong collector's toy orders and pre-order wishlist, using only the records given.
 Reply in Cantonese (Traditional Chinese, Hong Kong), short and friendly, plain text (no Markdown, no HTML), suitable for a phone chat.
-Times are Hong Kong time. Cancelled (已取消) and abandoned (已放棄) items only count if the question is about them. If the records don't answer the question, say so.`;
+Times are Hong Kong time. Cancelled (已取消), abandoned (已放棄) and missed (搶唔到: sold out before the user could order) items only count if the question is about them. If the records don't answer the question, say so.`;
 
 function questionRecords(items) {
   return items.map((it) => ({
