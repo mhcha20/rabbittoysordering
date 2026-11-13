@@ -1,8 +1,12 @@
-// Uses Claude (with web search/fetch) to turn order screenshots, or a link to a product post, into draft items.
+// Uses Google Gemini when GEMINI_API_KEY is set (else Claude, with xAI as backup), with web search/fetch, to turn order screenshots, or a link to a product post, into draft items.
 const Anthropic = require('@anthropic-ai/sdk');
 
 const MODEL = 'claude-opus-5-5';
 const XAI_MODEL = process.env.XAI_MODEL || 'grok-4.7';
+// Google Gemini: used for everything when GEMINI_API_KEY is set. Pro for web lookups, Flash for quick reads (receipts, Telegram).
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-pro-latest';
+const GEMINI_FAST_MODEL = process.env.GEMINI_FAST_MODEL || 'gemini-flash-latest';
+const useGemini = () => !!process.env.GEMINI_API_KEY;
 const STATUSES = ['待確認', '已下單', '已確認', '已發貨', '已收貨', '已取消'];
 const CURRENCIES = ['HKD', 'JPY', 'CNY', 'TWD', 'USD'];
 
@@ -317,7 +321,78 @@ async function runGrok({ system, schema: itemSchema, content, web = true, raw = 
   return result;
 }
 
+// ---------- Google Gemini ----------
+function geminiParts(content) {
+  const parts = [];
+  for (const block of content || []) {
+    if (block.type === 'text') parts.push({ text: block.text });
+    else if (block.type === 'image' && block.source?.data) parts.push({ inlineData: { mimeType: block.source.media_type, data: block.source.data } });
+  }
+  return parts.length ? parts : [{ text: '請根據指示回覆。' }];
+}
+
+async function callGemini({ model, system, parts, schema, search, maxOutput = 16000 }) {
+  const body = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts }],
+    generationConfig: { maxOutputTokens: maxOutput },
+  };
+  if (search) body.tools = [{ google_search: {} }, { url_context: {} }];
+  if (schema) Object.assign(body.generationConfig, { responseMimeType: 'application/json', responseJsonSchema: schema });
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(240000),
+  });
+  const raw = await r.text();
+  if (!r.ok) {
+    let detail = raw.slice(0, 300);
+    try { detail = JSON.parse(raw).error?.message || detail; } catch { /* keep slice */ }
+    const msg = r.status === 429 ? 'Gemini 用量到咗上限，等陣再試，或者喺 Google AI Studio 檢查額度。'
+      : r.status === 400 && /api key/i.test(detail) ? 'GEMINI_API_KEY 唔啱，請喺 Railway 檢查。'
+      : `Gemini 出錯（${r.status}）：${detail}`;
+    throw Object.assign(fail(r.status === 429 ? 429 : 502, msg), { upstream: r.status });
+  }
+  let data;
+  try { data = JSON.parse(raw); } catch { throw fail(502, 'Gemini 回覆唔係 JSON。'); }
+  const cand = data.candidates?.[0];
+  if (!cand) throw fail(422, `AI 未能處理呢個請求（${data.promptFeedback?.blockReason || '冇回覆'}），請手動輸入。`);
+  const text = (cand.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join('').trim();
+  if (!text) throw fail(cand.finishReason === 'MAX_TOKENS' ? 502 : 422, cand.finishReason === 'MAX_TOKENS' ? 'AI 回覆太長被截斷，請少啲截圖再試。' : `AI 未能處理呢個請求（${cand.finishReason || '冇內容'}），請手動輸入。`);
+  return text;
+}
+
+function parseJsonAny(text, raw) {
+  const t = String(text || '').trim();
+  const ok = (v) => v && typeof v === 'object' && (raw ? Array.isArray(v.lines) || 'lines' in v || 'urls' in v || 'items' in v : Array.isArray(v.items));
+  const cands = [t, ...[...t.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]), ...balancedObjects(t).reverse()];
+  for (const c of cands) { try { const v = JSON.parse(c); if (ok(v)) return v; } catch { /* next */ } }
+  console.error('Gemini reply was not usable JSON, length', t.length);
+  throw fail(502, 'AI 回覆格式有誤，請再試一次。');
+}
+
+async function runGemini({ system, schema: itemSchema, content, web = true, raw = false }) {
+  const schema = raw ? itemSchema : resultSchema(itemSchema);
+  const model = web ? GEMINI_MODEL : GEMINI_FAST_MODEL;
+  const instructions = system + (web ? '\n\nUse Google Search and URL context to open the official product page. photoUrls must be direct image file URLs of the product itself that you saw on fetched pages (shop CDN, official page). Never use the user\'s order screenshot, a receipt, a logo, or an icon. Never invent a URL.' : '');
+  const parts = geminiParts(content);
+  let text;
+  try {
+    text = await callGemini({ model, system: instructions, parts, schema, search: web });
+  } catch (err) {
+    if (err.upstream !== 400 || /api key/i.test(err.message)) throw err;
+    // some models refuse structured output together with search tools: ask for plain JSON instead
+    console.error('Gemini rejected structured output, retrying as plain JSON:', err.message);
+    text = await callGemini({ model, system: instructions + '\nReturn one JSON object only, no markdown, matching this JSON schema:\n' + JSON.stringify(schema), parts, schema: null, search: web });
+  }
+  const result = parseJsonAny(text, raw);
+  if (!raw && !Array.isArray(result.items)) throw fail(502, 'AI 回覆缺少商品資料。');
+  return result;
+}
+
 async function runAI(opts) {
+  if (useGemini()) return runGemini(opts);
   if (process.env.ANTHROPIC_API_KEY) {
     try { return await runClaude(opts); }
     catch (err) {
@@ -369,6 +444,7 @@ async function pageImages(url) {
 
 // The card should show the product, not the order screenshot. Look the photo up when the first pass found none.
 async function searchOfficialPhotos(items) {
+  if (useGemini()) return searchPhotosGemini(items);
   if (!process.env.XAI_API_KEY || !items.length) return;
   const lines = items.map((it, i) => `${i + 1}. ${it.name} | ${it.platform || ''} | ${it.orderUrl || ''}`).join('\n');
   let data;
@@ -392,6 +468,26 @@ async function searchOfficialPhotos(items) {
   for (const row of grouped?.items || []) {
     if (row && row.n) byN.set(Number(row.n), row.urls || row.photoUrls || []);
   }
+  for (let i = 0; i < items.length; i++) {
+    const urls = [...new Set((byN.get(i + 1) || []).filter(likelyProductImage))].slice(0, 4);
+    const checks = await Promise.all(urls.map(isImage));
+    const ok = urls.filter((_, j) => checks[j]);
+    if (ok.length) items[i].photos = ok.slice(0, 3);
+  }
+}
+
+const PHOTO_ROW = { type: 'object', additionalProperties: false, required: ['n', 'urls'], properties: { n: { type: 'integer' }, urls: { type: 'array', items: { type: 'string' } } } };
+async function searchPhotosGemini(items) {
+  if (!items.length) return;
+  let grouped;
+  try {
+    grouped = await runGemini({
+      system: 'Find the official product photo for each numbered item. Use Google Search and URL context to open the shop or maker page. urls must be direct https image files (jpg/png/webp) of that exact product that you saw on a fetched page. Never return an order-page screenshot, a logo, an icon, or a URL you did not see. Return JSON with an "items" list.',
+      schema: PHOTO_ROW,
+      content: [{ type: 'text', text: items.map((it, i) => `${i + 1}. ${it.name} | ${it.platform || ''} | ${it.orderUrl || ''}`).join('\n') }],
+    });
+  } catch (e) { console.error('official photo search', e.message); return; }
+  const byN = new Map((grouped.items || []).filter((r) => r && r.n).map((r) => [Number(r.n), r.urls || []]));
   for (let i = 0; i < items.length; i++) {
     const urls = [...new Set((byN.get(i + 1) || []).filter(likelyProductImage))].slice(0, 4);
     const checks = await Promise.all(urls.map(isImage));
@@ -541,6 +637,10 @@ async function answerWithGrok(question, records, now) {
 async function answerQuestion(question, items) {
   const records = questionRecords(items);
   const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+  if (useGemini()) {
+    return await callGemini({ model: GEMINI_FAST_MODEL, system: QA_SYSTEM, maxOutput: 4000,
+      parts: [{ text: `而家香港時間：${now}\n\n我嘅記錄（JSON）：\n${JSON.stringify(records)}` }, { text: `問題：${question}` }] }) || '（冇答案）';
+  }
   if (process.env.ANTHROPIC_API_KEY) {
     try { return await answerWithClaude(question, records, now); }
     catch (err) {

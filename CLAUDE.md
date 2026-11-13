@@ -18,7 +18,7 @@
 ## 檔案
 - `server.js`：零依賴 Node 伺服器（除咗 `@anthropic-ai/sdk`）。全站 HTTP Basic auth（`APP_PASSWORD`）；`/healthz` 開放。
   API：`GET/PUT /api/items`（PUT＝整份覆蓋，匯入備份用）、`PUT/DELETE /api/items/<id>`、`POST /api/ai/parse`、`POST /api/ai/link`、`POST /api/ai/receipt`、`POST /api/cart`、`GET /api/telegram`、`POST /api/telegram/test`、`GET /photos/<檔名>`。
-- `ai.js`：Claude（`claude-opus-5-5`）JSON schema 抽取訂單／wishlist、答問題。
+- `ai.js`：AI JSON schema 抽取訂單／wishlist、讀收據、答問題。有 `GEMINI_API_KEY` 就全部用 Google Gemini（REST，零依賴；上網用 `GEMINI_MODEL` 預設 `gemini-pro-latest`＋google_search／url_context，讀收據同 Telegram 用 `GEMINI_FAST_MODEL` 預設 `gemini-flash-latest`）；冇就用 Claude（`claude-opus-5-5`），餘額用晒轉 xAI。
 - `cart.js`：Shopify 多件購物車連結。
 - `telegram.js`：bot 輪詢、每分鐘 tick 發提醒。
 - `public/`：`index.html`、`app.js`（前端）、`style.css`、`seed.js`（第一次冇資料時嘅種子訂單）。
@@ -28,11 +28,11 @@
 - Railway project `rabbittoysordering`（id `f6b339ba-7955-4426-8e16-a3ceadc260b2`），service `web`（`9f266569-5f99-464d-9496-affba4c855c9`），環境 `production`（`c34d6b3c-e10a-469a-adfc-456d1e5444bf`）。
 - **部署 branch：`claude/keen-cerf-g5e2qs`**（亦係 GitHub 默認 branch）。網址 https://web-production-89b33.up.railway.app
 - `railway.json`：`node server.js`、healthcheck `/healthz`；SIGTERM 正常退出（避免「Deploy Crashed」電郵）。
-- Variables（只記名稱）：`APP_PASSWORD`、`ANTHROPIC_API_KEY`、`TELEGRAM_BOT_TOKEN`、`DATA_DIR`（`/data`）、`XAI_API_KEY`（已設，但程式未用）；選填 `TELEGRAM_CHAT_ID`、`TG_DAILY_PER_USER`、`TG_DAILY_TOTAL`、`PUBLIC_URL`。
+- Variables（只記名稱）：`APP_PASSWORD`、`ANTHROPIC_API_KEY`、`TELEGRAM_BOT_TOKEN`、`DATA_DIR`（`/data`）、`XAI_API_KEY`（Claude 後備）；選填 `GEMINI_API_KEY`（設咗就全部改用 Gemini）、`GEMINI_MODEL`、`GEMINI_FAST_MODEL`、 `TELEGRAM_CHAT_ID`、`TG_DAILY_PER_USER`、`TG_DAILY_TOTAL`、`PUBLIC_URL`。
 
 ## 注意
 - repo **公開**：新資料唔好入 repo（用網站入，存 volume）。
 - 時間一律當香港時間處理（`remindAt`／`deadline` 格式 `YYYY-MM-DDTHH:MM`）。
 
 ## 修改歷史（摘要，全部 2026-11-02）
-預訂追蹤網站＋相片上載＋種子訂單 → Node 伺服器多裝置同步 → 截圖 AI 入單 → 取貨地點篩選、手機直排表格、已收貨切換 → 相片輪播 → 想預訂分頁（連結 AI 查詢）→ 預訂網址欄 → 香港時間換算 → Telegram 提醒 → Telegram 問答 → 截止可帶時間、2 小時快截止提醒 → bot 開放俾任何人用（非主人有每日上限）。2026-11-06：一次過買（Shopify 購物車連結）。
+預訂追蹤網站＋相片上載＋種子訂單 → Node 伺服器多裝置同步 → 截圖 AI 入單 → 取貨地點篩選、手機直排表格、已收貨切換 → 相片輪播 → 想預訂分頁（連結 AI 查詢）→ 預訂網址欄 → 香港時間換算 → Telegram 提醒 → Telegram 問答 → 截止可帶時間、2 小時快截止提醒 → bot 開放俾任何人用（非主人有每日上限）。2026-11-06：一次過買（Shopify 購物車連結）。2026-11-13：收據落單預設全剔；改用 Google Gemini（`GEMINI_API_KEY`）。
