@@ -696,16 +696,29 @@ $('#receiptFile').onchange = async (e) => {
     const r = await api('POST', '/api/ai/receipt', { images, candidates: liveWishes().map((i) => ({ id: i.id, name: i.name, platform: i.platform })) });
     $('#aiBusy').close();
     if (!r.lines?.length) { alert('收據入面搵唔到商品。' + (r.summary || '')); return; }
+    autoMatch(r.lines);
     rcpt = { r, images };
     openReceipt();
   } catch (err) { aiError(err); } finally { busyTxt.textContent = old; }
 };
+// backup for lines the AI left unmatched: same name once shop prefixes / brackets / spaces are dropped
+const normName = (s) => String(s || '').normalize('NFKC').replace(/[<＜][^>＞]*[>＞]/g, '').replace(/\d{4}年\d{1,2}月(発売|発送)?予定/g, '')
+  .replace(/[【】\[\]「」『』()（）\s・･]/g, '').toLowerCase();
+function autoMatch(lines) {
+  const used = new Set(lines.map((l) => l.matchId).filter(Boolean));
+  for (const l of lines) {
+    if (l.matchId) continue;
+    const n = normName(l.name);
+    const w = n && liveWishes().find((x) => !used.has(x.id) && normName(x.name) === n);
+    if (w) { l.matchId = w.id; used.add(w.id); }
+  }
+}
 function rcptRowHtml(line, i) {
   const w = items.find((x) => x.id === line.matchId);
   const opts = '<option value="">➕ 想預訂冇呢件：新增做新訂單</option>' +
     liveWishes().map((x) => `<option value="${esc(x.id)}" ${x.id === line.matchId ? 'selected' : ''}>對返：${esc(x.name.slice(0, 60))}</option>`).join('');
   return `<div class="cartRow rcptRow" data-i="${i}">
-    <label class="cartTap"><input type="checkbox" data-rc="${i}" ${line.matchId ? 'checked' : ''}>
+    <label class="cartTap"><input type="checkbox" data-rc="${i}" ${line.pick !== false ? 'checked' : ''}>
       ${w?.photos?.[0] ? `<img src="${esc(w.photos[0])}" alt="" loading="lazy">` : '<span class="noimg">🧾</span>'}
       <span class="cartName">${esc(line.name)}<small>${fmt(rcpt.r.currency, line.price)} × ${line.qty}</small></span>
     </label>
@@ -732,9 +745,9 @@ $('#rcptList').addEventListener('change', (e) => {
     rcpt.r.lines[i].matchId = sel.value;
     // the same wish item can only be used once
     if (sel.value) rcpt.r.lines.forEach((l, j) => { if (j !== i && l.matchId === sel.value) l.matchId = ''; });
-    const checked = [...document.querySelectorAll('#rcptList [data-rc]')].map((c) => c.checked);
+    document.querySelectorAll('#rcptList [data-rc]').forEach((c, j) => { rcpt.r.lines[j].pick = c.checked; });
+    rcpt.r.lines[i].pick = true;
     $('#rcptList').innerHTML = rcpt.r.lines.map(rcptRowHtml).join('');
-    document.querySelectorAll('#rcptList [data-rc]').forEach((c, j) => { c.checked = j === i ? true : checked[j]; });
   }
   rcptCount();
 });
