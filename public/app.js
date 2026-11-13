@@ -241,6 +241,8 @@ function openEditor(it, { isNew = !it, title } = {}) {
   const f = $('#form');
   f.dataset.kind = kindOf(editing);
   f.status.innerHTML = statusesFor(kindOf(editing)).map((s) => `<option>${s}</option>`).join('');
+  // date picker; an old free-text date (e.g. 「10月尾」) stays editable as text so it isn't wiped
+  f.orderDate.type = !editing.orderDate || /^\d{4}-\d{2}-\d{2}$/.test(editing.orderDate) ? 'date' : 'text';
   for (const k of ['name', 'platform', 'orderNo', 'orderDate', 'shipDate', 'qty', 'currency', 'price', 'shipping', 'status', 'delivery', 'notes', 'link', 'orderUrl', 'deadline', 'remindAt']) f[k].value = editing[k] ?? '';
   f.deadline.value = (editing.deadline || '').slice(0, 10);
   f.deadlineTime.value = (editing.deadline || '').slice(11, 16);
@@ -259,16 +261,42 @@ $('#form').addEventListener('submit', (e) => {
     shipping: +f.shipping.value || 0, status: f.status.value, delivery: f.delivery.value.trim(), notes: f.notes.value,
     link: f.link.value.trim(), orderUrl: f.orderUrl.value.trim(), deadline: f.deadline.value ? f.deadline.value + (f.deadlineTime.value ? 'T' + f.deadlineTime.value.slice(0, 5) : '') : '', remindAt: f.remindAt.value.slice(0, 16),
   });
-  const draft = editing;
-  busy = true;
-  api('PUT', '/api/items/' + encodeURIComponent(draft.id), draft).then(({ item }) => {
-    const i = items.findIndex((x) => x.id === item.id);
-    const moved = i >= 0 && kindOf(items[i]) === 'wish' && kindOf(item) === 'order';
-    if (i >= 0) items[i] = item; else items.unshift(item);
-    render();
-    if (moved) alert('已經轉去「📦 我的訂單」。');
-  }).catch(showError).finally(() => { busy = false; });
+  queueSave(editing);
 });
+// Saves run one after another, so a batch of AI drafts uploads the shared order screenshots only once,
+// and a slow phone connection never has several big uploads racing each other.
+let saveChain = Promise.resolve(), saving = 0;
+const shotMap = new Map(); // screenshot data: URL -> stored /photos/ path
+function savingUi() {
+  busy = saving > 0;
+  const el = $('#saving');
+  el.hidden = !saving;
+  el.textContent = saving > 1 ? `儲存緊 ${saving} 件…請唔好離開或者重新整理` : '儲存緊…請唔好離開或者重新整理';
+}
+window.addEventListener('beforeunload', (e) => { if (saving) { e.preventDefault(); e.returnValue = ''; } });
+function queueSave(draft) {
+  saving++; savingUi();
+  saveChain = saveChain.then(async () => {
+    const sent = (draft.orderShots || []).map((x) => shotMap.get(x) || x);
+    const body = { ...draft, orderShots: sent };
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const { item } = await api('PUT', '/api/items/' + encodeURIComponent(draft.id), body);
+        sent.forEach((x, i) => { if (String(x).startsWith('data:') && item.orderShots?.[i]) shotMap.set(x, item.orderShots[i]); });
+        const i = items.findIndex((x) => x.id === item.id);
+        const moved = i >= 0 && kindOf(items[i]) === 'wish' && kindOf(item) === 'order';
+        if (i >= 0) items[i] = item; else items.unshift(item);
+        render();
+        if (moved) alert('已經轉去「📦 我的訂單」。');
+        return;
+      } catch (err) {
+        if (attempt < 2) { await new Promise((r) => setTimeout(r, 2000 * (attempt + 1))); continue; }
+        showError(err);
+        return;
+      }
+    }
+  }).finally(() => { saving--; savingUi(); });
+}
 $('#btnCancel').onclick = () => $('#dlg').close();
 $('#dlgX').onclick = () => $('#dlg').close();
 $('#btnDelete').onclick = () => {

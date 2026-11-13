@@ -215,3 +215,6 @@ button.small{padding:6px 12px;font-size:14px;border-radius:999px}
 button.statBtn{text-align:left;font:inherit;color:inherit;cursor:pointer}
 button.statBtn.on{border-color:var(--pink);box-shadow:0 0 0 2px var(--pink) inset}
 .failNote{color:#b0566b;font-weight:600}
+
+.savingPill{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:9999;background:#333;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:calc(100% - 32px);text-align:center}
+.savingPill[hidden]{display:none}
