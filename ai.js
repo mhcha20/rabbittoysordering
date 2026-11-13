@@ -1,4 +1,4 @@
-// Uses Google Gemini when GEMINI_API_KEY is set (else Claude, with xAI as backup), with web search/fetch, to turn order screenshots, or a link to a product post, into draft items.
+// Uses Claude first, then Google Gemini (GEMINI_API_KEY), then xAI as backups, with web search/fetch, to turn order screenshots, or a link to a product post, into draft items.
 const Anthropic = require('@anthropic-ai/sdk');
 
 const MODEL = 'claude-opus-5-5';
@@ -317,7 +317,7 @@ async function runGrok({ system, schema: itemSchema, content, web = true, raw = 
   }
   const result = parseJsonLoose(extractOutputText(data));
   if (!raw && !Array.isArray(result.items)) throw fail(502, 'xAI 回覆缺少商品資料。');
-  result.summary = '（Anthropic 餘額用晒，已改用 xAI）' + (result.summary || '');
+  result.summary = '（已改用 xAI 後備）' + (result.summary || '');
   return result;
 }
 
@@ -391,13 +391,30 @@ async function runGemini({ system, schema: itemSchema, content, web = true, raw 
   return result;
 }
 
+// Claude can't do the job (no credit, bad key, overloaded, down): try the next provider. A refusal or a bad reply is not retried.
+function claudeUnavailable(err) {
+  if (creditExhausted(err)) return true;
+  const st = Number(err?.status) || 0;
+  return !st || st === 401 || st === 403 || st === 429 || st >= 500;
+}
+
+// Order: Claude first, then Gemini, then xAI.
 async function runAI(opts) {
-  if (useGemini()) return runGemini(opts);
   if (process.env.ANTHROPIC_API_KEY) {
     try { return await runClaude(opts); }
     catch (err) {
-      if (!creditExhausted(err)) throw err;
-      console.error('Anthropic credits exhausted, falling back to xAI');
+      if (!claudeUnavailable(err) || (!useGemini() && !process.env.XAI_API_KEY)) throw err;
+      console.error('Claude unavailable, falling back:', err.status, err.message);
+    }
+  }
+  if (useGemini()) {
+    try {
+      const r = await runGemini(opts);
+      if (process.env.ANTHROPIC_API_KEY) r.summary = '（Claude 用唔到，已改用 Gemini）' + (r.summary || '');
+      return r;
+    } catch (err) {
+      if (!process.env.XAI_API_KEY) throw err;
+      console.error('Gemini failed, falling back to xAI:', err.message);
     }
   }
   return runGrok(opts);
@@ -637,15 +654,20 @@ async function answerWithGrok(question, records, now) {
 async function answerQuestion(question, items) {
   const records = questionRecords(items);
   const now = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
-  if (useGemini()) {
-    return await callGemini({ model: GEMINI_FAST_MODEL, system: QA_SYSTEM, maxOutput: 4000,
-      parts: [{ text: `而家香港時間：${now}\n\n我嘅記錄（JSON）：\n${JSON.stringify(records)}` }, { text: `問題：${question}` }] }) || '（冇答案）';
-  }
   if (process.env.ANTHROPIC_API_KEY) {
     try { return await answerWithClaude(question, records, now); }
     catch (err) {
-      if (!creditExhausted(err)) throw err;
-      console.error('Anthropic credits exhausted, falling back to xAI');
+      if (!claudeUnavailable(err) || (!useGemini() && !process.env.XAI_API_KEY)) throw err;
+      console.error('Claude unavailable, falling back:', err.status, err.message);
+    }
+  }
+  if (useGemini()) {
+    try {
+      return await callGemini({ model: GEMINI_FAST_MODEL, system: QA_SYSTEM, maxOutput: 4000,
+        parts: [{ text: `而家香港時間：${now}\n\n我嘅記錄（JSON）：\n${JSON.stringify(records)}` }, { text: `問題：${question}` }] }) || '（冇答案）';
+    } catch (err) {
+      if (!process.env.XAI_API_KEY) throw err;
+      console.error('Gemini failed, falling back to xAI:', err.message);
     }
   }
   return '（已改用 xAI）' + await answerWithGrok(question, records, now);
