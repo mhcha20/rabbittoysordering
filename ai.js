@@ -3,7 +3,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const MODEL = 'claude-opus-5-5';
 const XAI_MODEL = process.env.XAI_MODEL || 'grok-4.7';
-// Google Gemini: used for everything when GEMINI_API_KEY is set. Pro for web lookups, Flash for quick reads (receipts, Telegram).
+// Google Gemini: backup after Claude when GEMINI_API_KEY is set. Pro for web lookups, Flash for quick reads (receipts, Telegram).
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-pro-latest';
 const GEMINI_FAST_MODEL = process.env.GEMINI_FAST_MODEL || 'gemini-flash-latest';
 const useGemini = () => !!process.env.GEMINI_API_KEY;
@@ -460,46 +460,14 @@ async function pageImages(url) {
 }
 
 // The card should show the product, not the order screenshot. Look the photo up when the first pass found none.
-async function searchOfficialPhotos(items) {
-  if (useGemini()) return searchPhotosGemini(items);
-  if (!process.env.XAI_API_KEY || !items.length) return;
-  const lines = items.map((it, i) => `${i + 1}. ${it.name} | ${it.platform || ''} | ${it.orderUrl || ''}`).join('\n');
-  let data;
-  try {
-    data = await callXai({
-      instructions: 'Find the official product photo for each numbered item. Use web search. Return JSON only, matching the schema. urls must be direct https image files of that exact product from the shop or maker. Never return an order-page screenshot, a logo, an icon, or a URL you did not see.',
-      input: lines,
-      schema: resultSchema({
-        type: 'object', additionalProperties: false, required: ['n', 'urls'],
-        properties: { n: { type: 'integer' }, urls: { type: 'array', items: { type: 'string' } } },
-      }),
-      effort: 'low', maxOutput: 2000, search: true,
-    });
-  } catch (e) {
-    console.error('official photo search', e.message);
-    return;
-  }
-  let grouped = null;
-  try { grouped = parseJsonLoose(extractOutputText(data)); } catch { grouped = null; }
-  const byN = new Map();
-  for (const row of grouped?.items || []) {
-    if (row && row.n) byN.set(Number(row.n), row.urls || row.photoUrls || []);
-  }
-  for (let i = 0; i < items.length; i++) {
-    const urls = [...new Set((byN.get(i + 1) || []).filter(likelyProductImage))].slice(0, 4);
-    const checks = await Promise.all(urls.map(isImage));
-    const ok = urls.filter((_, j) => checks[j]);
-    if (ok.length) items[i].photos = ok.slice(0, 3);
-  }
-}
-
+// Same order as everything else: Claude first, then Gemini, then xAI.
 const PHOTO_ROW = { type: 'object', additionalProperties: false, required: ['n', 'urls'], properties: { n: { type: 'integer' }, urls: { type: 'array', items: { type: 'string' } } } };
-async function searchPhotosGemini(items) {
+async function searchOfficialPhotos(items) {
   if (!items.length) return;
   let grouped;
   try {
-    grouped = await runGemini({
-      system: 'Find the official product photo for each numbered item. Use Google Search and URL context to open the shop or maker page. urls must be direct https image files (jpg/png/webp) of that exact product that you saw on a fetched page. Never return an order-page screenshot, a logo, an icon, or a URL you did not see. Return JSON with an "items" list.',
+    grouped = await runAI({
+      system: 'Find the official product photo for each numbered item. Use web search, then open the shop or maker page. urls must be direct https image files (jpg/png/webp) of that exact product that you saw on a fetched page. Never return an order-page screenshot, a logo, an icon, or a URL you did not see. Return JSON with an "items" list, one row per item number.',
       schema: PHOTO_ROW,
       content: [{ type: 'text', text: items.map((it, i) => `${i + 1}. ${it.name} | ${it.platform || ''} | ${it.orderUrl || ''}`).join('\n') }],
     });

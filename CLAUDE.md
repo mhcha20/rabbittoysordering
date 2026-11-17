@@ -18,7 +18,7 @@
 ## 檔案
 - `server.js`：零依賴 Node 伺服器（除咗 `@anthropic-ai/sdk`）。全站 HTTP Basic auth（`APP_PASSWORD`）；`/healthz` 開放。
   API：`GET/PUT /api/items`（PUT＝整份覆蓋，匯入備份用）、`PUT/DELETE /api/items/<id>`、`POST /api/ai/parse`、`POST /api/ai/link`、`POST /api/ai/receipt`、`POST /api/cart`、`GET /api/telegram`、`POST /api/telegram/test`、`GET /photos/<檔名>`。
-- `ai.js`：AI JSON schema 抽取訂單／wishlist、讀收據、答問題。次序：Claude（`claude-opus-5-5`）先；Claude 用唔到（冇餘額、key 錯、429、5xx）就轉 Google Gemini（`GEMINI_API_KEY`，REST，零依賴；上網用 `GEMINI_MODEL` 預設 `gemini-pro-latest`＋google_search／url_context，讀收據同 Telegram 用 `GEMINI_FAST_MODEL` 預設 `gemini-flash-latest`）；再唔得先轉 xAI。搵官方相後備用 Gemini（有 key）否則 xAI。
+- `ai.js`：AI JSON schema 抽取訂單／wishlist、讀收據、答問題。次序：Claude（`claude-opus-5-5`）先；Claude 用唔到（冇餘額、key 錯、429、5xx）就轉 Google Gemini（`GEMINI_API_KEY`，REST，零依賴；上網用 `GEMINI_MODEL` 預設 `gemini-pro-latest`＋google_search／url_context，讀收據同 Telegram 用 `GEMINI_FAST_MODEL` 預設 `gemini-flash-latest`）；再唔得先轉 xAI。搵官方相都係同一次序（Claude → Gemini → xAI）。
 - `cart.js`：Shopify 多件購物車連結。
 - `telegram.js`：bot 輪詢、每分鐘 tick 發提醒。
 - `public/`：`index.html`、`app.js`（前端）、`style.css`、`seed.js`（第一次冇資料時嘅種子訂單）。
@@ -35,4 +35,4 @@
 - 時間一律當香港時間處理（`remindAt`／`deadline` 格式 `YYYY-MM-DDTHH:MM`）。
 
 ## 修改歷史（摘要，全部 2026-11-02）
-預訂追蹤網站＋相片上載＋種子訂單 → Node 伺服器多裝置同步 → 截圖 AI 入單 → 取貨地點篩選、手機直排表格、已收貨切換 → 相片輪播 → 想預訂分頁（連結 AI 查詢）→ 預訂網址欄 → 香港時間換算 → Telegram 提醒 → Telegram 問答 → 截止可帶時間、2 小時快截止提醒 → bot 開放俾任何人用（非主人有每日上限）。2026-11-06：一次過買（Shopify 購物車連結）。2026-11-13：收據落單預設全剔；加 Google Gemini 做 Claude 後備（Claude → Gemini → xAI）；編輯視窗儲存改為排隊逐件（`queueSave`，同批 AI 草稿嘅訂單截圖只上載一次，失敗自動重試 2 次，「儲存緊」提示＋離開前警告）——之前手機 LTE 多張單同時上載大截圖，重新整理頁面就冇咗；下單日期改用日曆揀（舊文字日期照舊顯示文字）。
+預訂追蹤網站＋相片上載＋種子訂單 → Node 伺服器多裝置同步 → 截圖 AI 入單 → 取貨地點篩選、手機直排表格、已收貨切換 → 相片輪播 → 想預訂分頁（連結 AI 查詢）→ 預訂網址欄 → 香港時間換算 → Telegram 提醒 → Telegram 問答 → 截止可帶時間、2 小時快截止提醒 → bot 開放俾任何人用（非主人有每日上限）。2026-11-06：一次過買（Shopify 購物車連結）。2026-11-13：收據落單預設全剔；加 Google Gemini 做 Claude 後備（Claude → Gemini → xAI）；編輯視窗儲存改為排隊逐件（`queueSave`，同批 AI 草稿嘅訂單截圖只上載一次，失敗自動重試 2 次，「儲存緊」提示＋離開前警告）——之前手機 LTE 多張單同時上載大截圖，重新整理頁面就冇咗；下單日期改用日曆揀（舊文字日期照舊顯示文字）。2026-11-17：用戶加咗新 Anthropic key；搵官方相改為 Claude 先（之前直接用 Gemini／xAI）。
