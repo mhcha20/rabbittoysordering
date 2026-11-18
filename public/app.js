@@ -619,7 +619,23 @@ const cartRowHtml = (i, checked = false) => `
         <span class="cartName">${esc(i.name)}${i.deadline ? `<small>${esc(i.deadline.replace('T', ' '))} 截止</small>` : ''}</span>
       </label>
       <span class="qty"><button type="button" data-step="-1" aria-label="減少">−</button><b>${i.qty || 1}</b><button type="button" data-step="1" aria-label="增加">＋</button></span>
+      <button type="button" class="cartDrop" data-drop="${esc(i.id)}" aria-label="冇興趣，移除：${esc(i.name)}" title="冇興趣，移除">✕</button>
     </div>`;
+// 「✕」 on a row: not interested any more. The wish is marked 已放棄 (kept, and shown again with 「顯示搶唔到／已放棄」).
+async function cartDrop(id, row) {
+  const it = items.find((x) => x.id === id);
+  if (!it) return;
+  const name = it.name.length > 40 ? it.name.slice(0, 40) + '…' : it.name;
+  if (!confirm(`對「${name}」冇興趣？\n會改做「已放棄」收埋，唔會再出現喺呢度；之後想買返，可以喺想預訂剔「顯示搶唔到／已放棄」搵返。`)) return;
+  const before = it.status;
+  it.status = '已放棄'; row.remove(); cartCount(); render();
+  if (!document.querySelector('#cartPick .cartRow')) $('#cartPickHead').hidden = true;
+  busy = true;
+  try {
+    const { item } = await api('PUT', '/api/items/' + encodeURIComponent(id), { ...it });
+    Object.assign(it, item); render();
+  } catch (e) { it.status = before; showError(e); refresh(); } finally { busy = false; }
+}
 async function cartAdd() {
   const url = $('#cartUrl').value.trim();
   if (!url) { $('#cartUrl').focus(); return; }
@@ -668,6 +684,8 @@ $('#cartAll').onclick = () => {
   cartCount();
 };
 $('#cartPick').addEventListener('click', (e) => {
+  const drop = e.target.closest('[data-drop]');
+  if (drop) { cartDrop(drop.dataset.drop, drop.closest('.cartRow')); return; }
   const b = e.target.closest('[data-step]');
   if (!b) return;
   const n = b.parentElement.querySelector('b');
