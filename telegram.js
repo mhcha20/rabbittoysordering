@@ -192,6 +192,7 @@ function createTelegram({ dataDir, getItems, publicUrl, ask }) {
   return {
     start,
     status: () => ({ configured: !!token, linked: !!state.chatId }),
+    notify: (html) => (token && state.chatId ? send(html) : Promise.resolve()),
     async test() {
       if (!token) throw Object.assign(new Error('未設定 TELEGRAM_BOT_TOKEN'), { status: 503 });
       if (!state.chatId) throw Object.assign(new Error('Bot 未連接：請喺 Telegram 打開你個 bot 撳「開始」（或者傳 /start），再試一次。'), { status: 409 });

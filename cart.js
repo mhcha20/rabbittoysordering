@@ -179,4 +179,4 @@ async function findSiblings(url) {
   return { base, items };
 }
 
-module.exports = { buildCart, parseLink, findSiblings };
+module.exports = { buildCart, parseLink, findSiblings, commonRun, HEADERS };

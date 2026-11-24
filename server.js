@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { parseOrder, parseWish, readReceipt, answerQuestion, findOfficialPhotos } = require('./ai');
 const { createTelegram } = require('./telegram');
+const { createLaunchWatch } = require('./launchwatch');
 const { buildCart, findSiblings } = require('./cart');
 
 const PORT = process.env.PORT || 3000;
@@ -42,6 +43,8 @@ const telegram = createTelegram({
   publicUrl: process.env.PUBLIC_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/` : ''),
 });
 telegram.start();
+// at sale time, send the matching product pages' links on Telegram
+createLaunchWatch({ dataDir: DATA_DIR, getItems: () => items, notify: (html) => telegram.notify(html) }).start();
 
 // Turn embedded data: URLs into stored files so items.json stays small.
 function imageExt(buf) {
