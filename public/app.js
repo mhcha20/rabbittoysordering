@@ -461,6 +461,7 @@ function setTab(t) {
   $('#fStatus').innerHTML = '<option value="">全部狀態</option>' +
     (t === 'order' ? '<option value="__pending">未收貨（全部）</option>' : '') + statusesFor(t).map((s) => `<option>${s}</option>`).join('');
   $('#showCancelled').parentElement.lastChild.textContent = t === 'wish' ? ' 顯示搶唔到／已放棄' : ' 顯示已取消';
+  $('#fStatus').value = t === 'order' ? '__pending' : ''; // orders open on 未收貨 by default
   $('#fPlatform').value = ''; $('#fPickup').value = '';
   render();
 }
